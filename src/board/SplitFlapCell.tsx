@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { CHARSET, CHAR_INDEX, COLOR_HEX, type ColorToken } from '../../shared/charset';
+import { flap } from './sound';
 
 const STEP_MS = 110; // one full flap = two 55ms half-turns
 const HALF_MS = STEP_MS / 2;
@@ -78,6 +79,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({ target, delayMs, inde
       setCur(next);
       curRef.current = next;
       setFlipId((f) => f + 1);
+      flap();
       if (next !== t) timerRef.current = setTimeout(step, STEP_MS);
       // once the final flap has landed, drop it from the DOM so the cell rests clean
       else timerRef.current = setTimeout(() => setPrev(next), STEP_MS + 40);

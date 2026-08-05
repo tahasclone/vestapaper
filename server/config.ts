@@ -28,6 +28,10 @@ export interface Config {
     prayer: { location: string };
     flights: { location: string };
   };
+  sound: {
+    enabled: boolean;
+    volume: number; // 0..1
+  };
   messages: {
     telegram: { enabled: boolean; botToken: string };
     discord: { enabled: boolean; botToken: string; channelId: string };
@@ -47,6 +51,7 @@ export const DEFAULT_CONFIG: Config = {
     prayer: { location: 'Dubai' },
     flights: { location: 'Dubai' },
   },
+  sound: { enabled: false, volume: 0.4 },
   messages: {
     telegram: { enabled: false, botToken: '' },
     discord: { enabled: false, botToken: '', channelId: '' },

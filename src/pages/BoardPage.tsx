@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { useBoardState } from '../board/useBoardState';
+import { configureSound } from '../board/sound';
 
 const GEAR_HIDE_MS = 5000;
 
@@ -15,7 +16,11 @@ function GearIcon() {
 }
 
 export function BoardPage() {
-  const { cells } = useBoardState();
+  const { cells, sound } = useBoardState();
+
+  useEffect(() => {
+    configureSound(sound?.enabled ?? false, sound?.volume ?? 0.4);
+  }, [sound?.enabled, sound?.volume]);
   const [gearVisible, setGearVisible] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
 

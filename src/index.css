@@ -408,6 +408,14 @@ body {
   border-color: rgba(229, 181, 58, 0.55);
 }
 
+.field input[type='range'] {
+  accent-color: var(--accent);
+  padding: 0;
+  height: 32px;
+  border: none;
+  background: transparent;
+}
+
 .field textarea {
   resize: vertical;
   min-height: 74px;

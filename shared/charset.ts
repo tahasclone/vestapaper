@@ -43,4 +43,5 @@ export interface BoardState {
   source: 'main' | 'message';
   text: string;
   updatedAt: number;
+  sound?: { enabled: boolean; volume: number };
 }

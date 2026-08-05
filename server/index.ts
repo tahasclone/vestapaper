@@ -45,6 +45,7 @@ app.post('/api/config', (req, res) => {
   saveConfig(sanitizePatch(req.body));
   scheduleMain();
   void applyMessageConfig();
+  board.touch(); // push updated sound settings to connected boards
   res.json(publicConfig());
 });
 

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { BoardState } from '../shared/charset.js';
 import { CELL_COUNT } from '../shared/charset.js';
 import { formatToCells } from './format.js';
+import { getConfig } from './config.js';
 
 const MESSAGE_SECONDS = 60;
 
@@ -35,7 +36,13 @@ class BoardStateMachine extends EventEmitter {
       source: this.display.source,
       text: this.display.text,
       updatedAt: Date.now(),
+      sound: getConfig().sound,
     };
+  }
+
+  /** Re-broadcast current state (e.g. after a config change alters sound settings). */
+  touch() {
+    this.emit('change', this.get());
   }
 
   /** Called by the active main integration whenever it has fresh content. */

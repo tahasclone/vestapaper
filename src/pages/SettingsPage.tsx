@@ -296,6 +296,51 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* --------------------------------------------------- sound */}
+        <div className="section">
+          <div className="section-label">
+            SOUND <span className="hint">mechanical flap clatter</span>
+          </div>
+          <div className={`card ${cfg.sound?.enabled ? 'active' : ''}`}>
+            <div
+              className="card-head"
+              onClick={() => patch((d) => (d.sound.enabled = !d.sound.enabled))}
+              role="switch"
+              aria-checked={!!cfg.sound?.enabled}
+            >
+              <span className={`pip ${cfg.sound?.enabled ? 'on' : ''}`} />
+              <div>
+                <div className="name">FLIP SOUND</div>
+                <div className="desc">
+                  Synthesized clicks as the flaps cycle. Browsers may stay silent until the page is
+                  clicked once; in Plash it plays if Plash's own mute is off.
+                </div>
+              </div>
+            </div>
+            {cfg.sound?.enabled && (
+              <div className="card-body">
+                <div className="row">
+                  <div className="field">
+                    <label>VOLUME — {Math.round((cfg.sound?.volume ?? 0.4) * 100)}%</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={cfg.sound?.volume ?? 0.4}
+                      onChange={(e) => patch((d) => (d.sound.volume = Number(e.target.value)))}
+                    />
+                  </div>
+                  <div className="actions" style={{ marginTop: 18 }}>
+                    <button className="primary" onClick={() => save('sound')}>SAVE</button>
+                    {savedFlash === 'sound' && <span className="test-result ok">✓ SAVED</span>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ------------------------------------------------- messages */}
         <div className="section">
           <div className="section-label">
