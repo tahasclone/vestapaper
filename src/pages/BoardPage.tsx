@@ -16,11 +16,17 @@ function GearIcon() {
 }
 
 export function BoardPage() {
-  const { cells, sound } = useBoardState();
+  const { cells, rows, cols, sound } = useBoardState();
 
   useEffect(() => {
     configureSound(sound?.enabled ?? false, sound?.volume ?? 0.4);
   }, [sound?.enabled, sound?.volume]);
+
+  // The wallpaper fills the viewport with no scrollbars; other pages scroll.
+  useEffect(() => {
+    document.body.classList.add('board-locked');
+    return () => document.body.classList.remove('board-locked');
+  }, []);
   const [gearVisible, setGearVisible] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -40,7 +46,9 @@ export function BoardPage() {
 
   return (
     <div className="wall">
-      <SplitFlapBoard cells={cells} />
+      <div className="board-stage">
+        <SplitFlapBoard cells={cells} rows={rows} cols={cols} />
+      </div>
       <Link
         to="/settings"
         className={`gear ${gearVisible ? '' : 'hidden'}`}

@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { CELL_COUNT, type BoardState } from '../../shared/charset';
+import { FULL_BOARD, type BoardState } from '../../shared/charset';
+import { blankCells } from '../../shared/format';
+import { getBoardState } from '../api/client';
 
 const EMPTY: BoardState = {
-  cells: new Array(CELL_COUNT).fill(' '),
+  rows: FULL_BOARD.rows,
+  cols: FULL_BOARD.cols,
+  cells: blankCells(FULL_BOARD),
   source: 'main',
   text: '',
   updatedAt: 0,
@@ -43,8 +47,8 @@ export function useBoardState(): BoardState {
     const poll = setInterval(async () => {
       if (wsOpen.current) return;
       try {
-        const res = await fetch('/api/board-state');
-        if (res.ok) setState(await res.json());
+        const next = await getBoardState(null);
+        if (!('unchanged' in next)) setState(next);
       } catch {
         /* server not up yet */
       }

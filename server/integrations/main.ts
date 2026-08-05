@@ -1,7 +1,18 @@
 import { getConfig, type MainSource } from '../config.js';
 import { board } from '../state.js';
-import { tokenize, centerLine, linesToCells, formatToCells } from '../format.js';
-import { ROWS } from '../../shared/charset.js';
+import { tokenize, centerLine, linesToCells, formatToCells } from '../../shared/format.js';
+import { FULL_BOARD, type BoardSize } from '../../shared/charset.js';
+
+/**
+ * Layouts below hand-compose 5-6 lines against a ~22-column drum. On a board
+ * too small to hold them, callers fall back to formatToCells(text) instead —
+ * see renderSized().
+ */
+const MIN_LAYOUT: BoardSize = { rows: 5, cols: 20 };
+
+export function fitsLayout(size: BoardSize): boolean {
+  return size.rows >= MIN_LAYOUT.rows && size.cols >= MIN_LAYOUT.cols;
+}
 
 const WEATHER_CODES: Record<number, string> = {
   0: 'CLEAR SKY',
@@ -38,16 +49,19 @@ async function getJson(url: string): Promise<any> {
   return res.json();
 }
 
-function centeredBlock(lines: string[][]): string[] {
-  const offset = Math.floor((ROWS - lines.length) / 2);
-  const grid: string[][] = new Array(ROWS).fill(null).map(() => []);
+function centeredBlock(lines: string[][], size: BoardSize = FULL_BOARD): string[] {
+  const offset = Math.floor((size.rows - lines.length) / 2);
+  const grid: string[][] = new Array(size.rows).fill(null).map(() => []);
   lines.forEach((l, i) => {
-    if (offset + i < ROWS) grid[offset + i] = centerLine(l);
+    if (offset + i < size.rows) grid[offset + i] = centerLine(l, size.cols);
   });
-  return linesToCells(grid);
+  return linesToCells(grid, size);
 }
 
-export async function fetchWeather(location: string): Promise<{ text: string; cells: string[] }> {
+export async function fetchWeather(
+  location: string,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   let lat: number, lon: number, name: string;
   const coordMatch = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (coordMatch) {
@@ -79,7 +93,7 @@ export async function fetchWeather(location: string): Promise<{ text: string; ce
     tokenize(`HUMIDITY ${Math.round(cur.relative_humidity_2m)}%`),
     tokenize(`WIND ${Math.round(cur.wind_speed_10m)} KM/H`),
   ];
-  return { text: `${name}: ${cur.temperature_2m}° ${desc}`, cells: centeredBlock(lines) };
+  return { text: `${name}: ${cur.temperature_2m}° ${desc}`, cells: centeredBlock(lines, size) };
 }
 
 export async function fetchQuote(): Promise<{ text: string; cells?: string[] }> {
@@ -89,7 +103,9 @@ export async function fetchQuote(): Promise<{ text: string; cells?: string[] }> 
   return { text: `${q.q} -${q.a}` };
 }
 
-export async function fetchNews(): Promise<{ text: string; cells: string[] }> {
+export async function fetchNews(
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const ids: number[] = await getJson('https://hacker-news.firebaseio.com/v0/topstories.json');
   const top = await Promise.all(
     ids.slice(0, 3).map((id) => getJson(`https://hacker-news.firebaseio.com/v0/item/${id}.json`)),
@@ -97,18 +113,20 @@ export async function fetchNews(): Promise<{ text: string; cells: string[] }> {
   const lines: string[][] = [tokenize('{orange} HACKER NEWS {orange}')];
   for (const story of top) {
     if (!story?.title) continue;
-    const toks = tokenize(story.title).slice(0, 22);
     lines.push([]);
-    lines.push(toks);
+    lines.push(tokenize(story.title).slice(0, size.cols));
   }
   // headline rows are left-aligned inside a centered block for readability
-  const offset = Math.floor((ROWS - lines.length) / 2);
-  const grid: string[][] = new Array(ROWS).fill(null).map(() => []);
+  const offset = Math.floor((size.rows - lines.length) / 2);
+  const grid: string[][] = new Array(size.rows).fill(null).map(() => []);
   lines.forEach((l, i) => {
     const row = offset + i;
-    if (row >= 0 && row < ROWS) grid[row] = i === 0 ? centerLine(l) : l;
+    if (row >= 0 && row < size.rows) grid[row] = i === 0 ? centerLine(l, size.cols) : l;
   });
-  return { text: top.map((s) => s?.title).filter(Boolean).join(' / '), cells: linesToCells(grid) };
+  return {
+    text: top.map((s) => s?.title).filter(Boolean).join(' / '),
+    cells: linesToCells(grid, size),
+  };
 }
 
 const COIN_LABELS: Record<string, string> = {
@@ -120,7 +138,10 @@ const COIN_LABELS: Record<string, string> = {
   cardano: 'CARDANO',
 };
 
-export async function fetchCrypto(coin: string): Promise<{ text: string; cells: string[] }> {
+export async function fetchCrypto(
+  coin: string,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const data = await getJson(
     `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coin)}&vs_currencies=usd&include_24hr_change=true`,
   );
@@ -138,7 +159,7 @@ export async function fetchCrypto(coin: string): Promise<{ text: string; cells: 
   ];
   return {
     text: `${coin} $${price} (${sign}${change.toFixed(1)}%)`,
-    cells: centeredBlock(lines),
+    cells: centeredBlock(lines, size),
   };
 }
 
@@ -160,7 +181,9 @@ const WORDS = [
   'QUANDARY', 'RECALCITRANT', 'STOIC', 'TENACIOUS', 'UNCTUOUS', 'VORACIOUS',
 ].map((w) => w.replace(/[^A-Z]/gi, '').toUpperCase());
 
-export async function fetchWord(): Promise<{ text: string; cells: string[] }> {
+export async function fetchWord(
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const dayIndex = Math.floor(Date.now() / 86_400_000);
   const word = WORDS[dayIndex % WORDS.length];
   let partOfSpeech = '';
@@ -181,11 +204,13 @@ export async function fetchWord(): Promise<{ text: string; cells: string[] }> {
   }
   return {
     text: `${word}: ${definition}`,
-    cells: formatToCells(body.join('\n')),
+    cells: formatToCells(body.join('\n'), size),
   };
 }
 
-export async function fetchIss(): Promise<{ text: string; cells: string[] }> {
+export async function fetchIss(
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const iss = await getJson('https://api.wheretheiss.at/v1/satellites/25544');
   let over = 'THE OPEN OCEAN';
   try {
@@ -211,13 +236,16 @@ export async function fetchIss(): Promise<{ text: string; cells: string[] }> {
   ];
   return {
     text: `ISS over ${over}, ${Math.round(iss.altitude)} km`,
-    cells: centeredBlock(lines),
+    cells: centeredBlock(lines, size),
   };
 }
 
 const PRAYER_ORDER = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const;
 
-export async function fetchPrayer(location: string): Promise<{ text: string; cells: string[] }> {
+export async function fetchPrayer(
+  location: string,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const geo = await getJson(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en`,
   );
@@ -246,19 +274,21 @@ export async function fetchPrayer(location: string): Promise<{ text: string; cel
     const marker = p === next ? '{green} ' : '';
     lines.push(tokenize(`${marker}${name}${timings[p]}`));
   }
-  const grid = lines.slice(0, ROWS).map((l) => centerLine(l));
+  const grid = lines.slice(0, size.rows).map((l) => centerLine(l, size.cols));
   return {
     text: `Next prayer ${next} at ${timings[next]}`,
-    cells: linesToCells(grid),
+    cells: linesToCells(grid, size),
   };
 }
 
-export async function fetchFacts(): Promise<{ text: string; cells: string[] }> {
+export async function fetchFacts(
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const data = await getJson('https://uselessfacts.jsph.pl/api/v2/facts/random?language=en');
   if (!data?.text) throw new Error('No fact returned');
   return {
     text: data.text,
-    cells: formatToCells(`{orange} DID YOU KNOW? {orange}\n${data.text}`),
+    cells: formatToCells(`{orange} DID YOU KNOW? {orange}\n${data.text}`, size),
   };
 }
 
@@ -323,7 +353,10 @@ function bearingFrom(lat1: number, lon1: number, lat2: number, lon2: number): st
 
 const RADIUS_NM = 30;
 
-export async function fetchFlights(location: string): Promise<{ text: string; cells: string[] }> {
+export async function fetchFlights(
+  location: string,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
   const { lat, lon } = await resolveLocation(location);
   const data = await getJson(`https://api.adsb.lol/v2/point/${lat}/${lon}/${RADIUS_NM}`);
   const aircraft = (data?.ac ?? [])
@@ -333,7 +366,7 @@ export async function fetchFlights(location: string): Promise<{ text: string; ce
   if (!aircraft.length) {
     return {
       text: 'Quiet skies above',
-      cells: formatToCells(`{blue} OVERHEAD NOW {blue}\n\nQUIET SKIES ABOVE`),
+      cells: formatToCells(`{blue} OVERHEAD NOW {blue}\n\nQUIET SKIES ABOVE`, size),
     };
   }
 
@@ -374,32 +407,70 @@ export async function fetchFlights(location: string): Promise<{ text: string; ce
 
   return {
     text: `${callsign} ${type} ${route || ''} ${distKm ?? '?'} km away`.replace(/\s+/g, ' '),
-    cells: centeredBlock(lines),
+    cells: centeredBlock(lines, size),
   };
 }
 
-export async function fetchMain(source: MainSource): Promise<{ text: string; cells?: string[] }> {
-  const cfg = getConfig();
+/** Params a source needs, so this stays callable without a config singleton. */
+export interface SourceParams {
+  weatherLocation: string;
+  coin: string;
+  prayerLocation: string;
+  flightsLocation: string;
+}
+
+export function paramsFromConfig(cfg: ReturnType<typeof getConfig>): SourceParams {
+  return {
+    weatherLocation: cfg.main.weather.location,
+    coin: cfg.main.crypto.coin,
+    prayerLocation: cfg.main.prayer.location,
+    flightsLocation: cfg.main.flights.location,
+  };
+}
+
+export async function fetchSource(
+  source: MainSource,
+  params: SourceParams,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells?: string[] }> {
   switch (source) {
     case 'weather':
-      return fetchWeather(cfg.main.weather.location);
+      return fetchWeather(params.weatherLocation, size);
     case 'quotes':
       return fetchQuote();
     case 'news':
-      return fetchNews();
+      return fetchNews(size);
     case 'crypto':
-      return fetchCrypto(cfg.main.crypto.coin);
+      return fetchCrypto(params.coin, size);
     case 'word':
-      return fetchWord();
+      return fetchWord(size);
     case 'iss':
-      return fetchIss();
+      return fetchIss(size);
     case 'prayer':
-      return fetchPrayer(cfg.main.prayer.location);
+      return fetchPrayer(params.prayerLocation, size);
     case 'facts':
-      return fetchFacts();
+      return fetchFacts(size);
     case 'flights':
-      return fetchFlights(cfg.main.flights.location);
+      return fetchFlights(params.flightsLocation, size);
   }
+}
+
+/**
+ * Render a source for a board of the given size. Layouts that hand-compose
+ * 5-6 lines don't survive a small board, so fall back to plain centered text.
+ */
+export async function renderSized(
+  source: MainSource,
+  params: SourceParams,
+  size: BoardSize = FULL_BOARD,
+): Promise<{ text: string; cells: string[] }> {
+  const { text, cells } = await fetchSource(source, params, size);
+  if (cells && fitsLayout(size)) return { text, cells };
+  return { text, cells: formatToCells(text, size) };
+}
+
+export async function fetchMain(source: MainSource): Promise<{ text: string; cells?: string[] }> {
+  return fetchSource(source, paramsFromConfig(getConfig()));
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

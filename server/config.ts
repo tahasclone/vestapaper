@@ -60,9 +60,13 @@ export const DEFAULT_CONFIG: Config = {
   },
 };
 
+// Keys that would let a JSON payload reach through to Object.prototype.
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function deepMerge<T>(base: T, patch: Partial<T>): T {
   const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
   for (const [k, v] of Object.entries(patch ?? {})) {
+    if (FORBIDDEN_KEYS.has(k)) continue;
     if (v && typeof v === 'object' && !Array.isArray(v) && typeof (out as any)[k] === 'object') {
       out[k] = deepMerge((out as any)[k], v as any);
     } else if (v !== undefined) {

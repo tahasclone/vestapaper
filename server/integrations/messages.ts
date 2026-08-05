@@ -29,7 +29,8 @@ async function runTelegram(token: string, generation: number) {
         offset = update.update_id + 1;
         const text = update.message?.text ?? update.channel_post?.text;
         if (text && generation === telegramGeneration) {
-          console.log('[telegram] message:', text);
+          // never log message text — it's someone's private DM
+          console.log(`[telegram] message received (${text.length} chars)`);
           board.showMessage(text);
         }
       }
@@ -59,7 +60,7 @@ async function startDiscord(token: string, channelId: string) {
     if (channelId && msg.channelId !== channelId) return;
     const text = msg.cleanContent || msg.content;
     if (text) {
-      console.log('[discord] message:', text);
+      console.log(`[discord] message received (${text.length} chars)`);
       board.showMessage(text);
     }
   });
@@ -83,7 +84,7 @@ async function startSlack(appToken: string) {
     await ack();
     if (event?.bot_id || event?.subtype) return;
     if (event?.text) {
-      console.log('[slack] message:', event.text);
+      console.log(`[slack] message received (${String(event.text).length} chars)`);
       board.showMessage(event.text);
     }
   });

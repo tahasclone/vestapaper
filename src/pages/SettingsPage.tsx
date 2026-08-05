@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { COLOR_HEX } from '../../shared/charset';
+import { getConfig, saveConfig, sendMessage, testSource } from '../api/client';
+import { SplitFlapBoard } from '../board/SplitFlapBoard';
+import { formatToCells } from '../../shared/format';
 
 type TestState = { status: 'idle' | 'busy' | 'ok' | 'err'; detail?: string };
 
@@ -25,25 +27,14 @@ const MAIN_OPTIONS = [
   { key: 'flights', name: 'FLIGHT OVERHEAD', desc: 'adsb.lol · nearest aircraft, route + distance' },
 ] as const;
 
-async function api(path: string, body?: unknown) {
-  const res = await fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return res.json();
-}
+const WORDMARK_SIZE = { rows: 1, cols: 12 };
+const WORDMARK_CELLS = formatToCells('SOLARIS {yellow}', WORDMARK_SIZE);
 
-function MiniBoard() {
-  const word = 'SPLITFLAP'.split('');
+/** A real one-row board instead of the old fake decorative strip. */
+function Wordmark() {
   return (
-    <div className="mini-board" aria-hidden>
-      {word.map((c, i) => (
-        <span key={i} className="mini-cell">{c}</span>
-      ))}
-      <span className="mini-cell chip-cell">
-        <i style={{ background: COLOR_HEX['{yellow}'] }} />
-      </span>
+    <div className="wordmark" aria-hidden>
+      <SplitFlapBoard cells={WORDMARK_CELLS} {...WORDMARK_SIZE} maxCellH={26} bare />
     </div>
   );
 }
@@ -56,7 +47,7 @@ export function SettingsPage() {
   const [sendState, setSendState] = useState<TestState>({ status: 'idle' });
 
   useEffect(() => {
-    api('/api/config').then(setCfg).catch(() => {});
+    getConfig().then(setCfg).catch(() => {});
   }, []);
 
   if (!cfg) {
@@ -76,7 +67,7 @@ export function SettingsPage() {
   };
 
   const save = async (label: string) => {
-    const fresh = await api('/api/config', cfg);
+    const fresh = await saveConfig(cfg);
     setCfg(fresh);
     setSavedFlash(label);
     setTimeout(() => setSavedFlash(null), 2200);
@@ -85,7 +76,7 @@ export function SettingsPage() {
   const runTest = async (key: string, extra: Record<string, unknown> = {}) => {
     setTests((t) => ({ ...t, [key]: { status: 'busy' } }));
     try {
-      const r = await api(`/api/test/${key}`, { messages: cfg.messages, ...extra });
+      const r = await testSource(key, { messages: cfg.messages, ...extra });
       setTests((t) => ({
         ...t,
         [key]: r.ok ? { status: 'ok', detail: r.detail } : { status: 'err', detail: r.error },
@@ -98,7 +89,7 @@ export function SettingsPage() {
   const sendCustom = async () => {
     if (!customText.trim()) return;
     setSendState({ status: 'busy' });
-    const r = await api('/api/message', { text: customText });
+    const r = await sendMessage(customText);
     setSendState(
       r.ok
         ? { status: 'ok', detail: 'On the board for the next 60 seconds' }
@@ -138,7 +129,7 @@ export function SettingsPage() {
     <div className="settings">
       <div className="settings-inner">
         <Link to="/" className="back-link">← BACK TO BOARD</Link>
-        <MiniBoard />
+        <Wordmark />
         <h1>SETTINGS</h1>
         <p className="subtitle">
           One main source feeds the board. Messages interrupt it for 60 seconds, then it flips back.

@@ -23,9 +23,22 @@ export const CHARSET: string[] = [
 
 export const CHAR_INDEX = new Map(CHARSET.map((c, i) => [c, i]));
 
-export const ROWS = 6;
-export const COLS = 22;
-export const CELL_COUNT = ROWS * COLS;
+export interface BoardSize {
+  rows: number;
+  cols: number;
+}
+
+/** The real Vestaboard geometry — what every user's board uses. */
+export const FULL_BOARD: BoardSize = { rows: 6, cols: 22 };
+
+/** Small board for the landing-page hero. */
+export const HERO_BOARD: BoardSize = { rows: 3, cols: 14 };
+
+export const cellCount = (size: BoardSize) => size.rows * size.cols;
+
+export const ROWS = FULL_BOARD.rows;
+export const COLS = FULL_BOARD.cols;
+export const CELL_COUNT = cellCount(FULL_BOARD);
 
 export const COLOR_HEX: Record<ColorToken, string> = {
   '{red}': '#d63c30',
@@ -39,9 +52,15 @@ export const COLOR_HEX: Record<ColorToken, string> = {
 };
 
 export interface BoardState {
-  cells: string[]; // length CELL_COUNT, each entry is a member of CHARSET
+  rows: number;
+  cols: number;
+  cells: string[]; // length rows*cols, each entry is a member of CHARSET
   source: 'main' | 'message';
   text: string;
   updatedAt: number;
+  /** When a message override lapses, so the client can re-poll exactly then. */
+  expiresAt?: number | null;
+  /** Monotonic counter, bumped on every content change, for conditional polling. */
+  revision?: number;
   sound?: { enabled: boolean; volume: number };
 }
