@@ -6,14 +6,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_DIR = path.join(__dirname, '..', 'data');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
-export type MainSource = 'weather' | 'quotes' | 'news' | 'crypto';
+export type MainSource =
+  | 'weather'
+  | 'quotes'
+  | 'news'
+  | 'crypto'
+  | 'word'
+  | 'iss'
+  | 'prayer'
+  | 'facts';
 
 export interface Config {
   main: {
     selected: MainSource;
+    rotate: boolean;
+    rotationSources: MainSource[];
     refreshMinutes: number;
     weather: { location: string };
     crypto: { coin: string };
+    prayer: { location: string };
   };
   messages: {
     telegram: { enabled: boolean; botToken: string };
@@ -26,9 +37,12 @@ export interface Config {
 export const DEFAULT_CONFIG: Config = {
   main: {
     selected: 'quotes',
+    rotate: false,
+    rotationSources: ['word', 'iss', 'prayer', 'facts'],
     refreshMinutes: 5,
     weather: { location: 'Dubai' },
     crypto: { coin: 'bitcoin' },
+    prayer: { location: 'Dubai' },
   },
   messages: {
     telegram: { enabled: false, botToken: '' },

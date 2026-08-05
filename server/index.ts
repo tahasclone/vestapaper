@@ -6,7 +6,17 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { getConfig, publicConfig, saveConfig, sanitizePatch } from './config.js';
 import { board } from './state.js';
-import { scheduleMain, fetchWeather, fetchQuote, fetchNews, fetchCrypto } from './integrations/main.js';
+import {
+  scheduleMain,
+  fetchWeather,
+  fetchQuote,
+  fetchNews,
+  fetchCrypto,
+  fetchWord,
+  fetchIss,
+  fetchPrayer,
+  fetchFacts,
+} from './integrations/main.js';
 import {
   applyMessageConfig,
   testTelegram,
@@ -61,6 +71,18 @@ app.post('/api/test/:integration', async (req, res) => {
         break;
       case 'crypto':
         detail = (await fetchCrypto(req.body?.coin ?? cfg.main.crypto.coin)).text;
+        break;
+      case 'word':
+        detail = (await fetchWord()).text.slice(0, 120);
+        break;
+      case 'iss':
+        detail = (await fetchIss()).text;
+        break;
+      case 'prayer':
+        detail = (await fetchPrayer(req.body?.prayerLocation ?? cfg.main.prayer.location)).text;
+        break;
+      case 'facts':
+        detail = (await fetchFacts()).text.slice(0, 120);
         break;
       case 'telegram':
         detail = await testTelegram(

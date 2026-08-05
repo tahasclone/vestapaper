@@ -18,6 +18,10 @@ const MAIN_OPTIONS = [
   { key: 'quotes', name: 'QUOTE OF THE DAY', desc: 'ZenQuotes · one quote, refreshed daily' },
   { key: 'news', name: 'NEWS HEADLINES', desc: 'Hacker News · top stories' },
   { key: 'crypto', name: 'CRYPTO PRICE', desc: 'CoinGecko · spot price + 24h change' },
+  { key: 'word', name: 'WORD OF THE DAY', desc: 'Free Dictionary · one word + definition daily' },
+  { key: 'iss', name: 'ISS TRACKER', desc: 'wheretheiss.at · live position, altitude, speed' },
+  { key: 'prayer', name: 'PRAYER TIMES', desc: 'Aladhan · today’s times, next prayer marked' },
+  { key: 'facts', name: 'RANDOM FACT', desc: 'uselessfacts · a new fact every refresh' },
 ] as const;
 
 async function api(path: string, body?: unknown) {
@@ -115,6 +119,19 @@ export function SettingsPage() {
   };
 
   const selected = cfg.main.selected;
+  const rotate: boolean = !!cfg.main.rotate;
+  const rotation: string[] = cfg.main.rotationSources ?? [];
+  const isActive = (key: string) => (rotate ? rotation.includes(key) : selected === key);
+  const pickSource = (key: string) =>
+    patch((d) => {
+      if (rotate) {
+        const set = new Set(d.main.rotationSources ?? []);
+        set.has(key) ? set.delete(key) : set.add(key);
+        d.main.rotationSources = [...set];
+      } else {
+        d.main.selected = key;
+      }
+    });
 
   return (
     <div className="settings">
@@ -129,25 +146,45 @@ export function SettingsPage() {
         {/* ------------------------------------------------ main source */}
         <div className="section">
           <div className="section-label">
-            MAIN SOURCE <span className="hint">single select</span>
+            MAIN SOURCE{' '}
+            <span className="hint">
+              {rotate ? 'rotating — pick any combination' : 'single select'}
+            </span>
+          </div>
+
+          <div className={`card ${rotate ? 'active' : ''}`}>
+            <div
+              className="card-head"
+              onClick={() => patch((d) => (d.main.rotate = !d.main.rotate))}
+              role="switch"
+              aria-checked={rotate}
+            >
+              <span className={`pip ${rotate ? 'on' : ''}`} />
+              <div>
+                <div className="name">ROTATE BETWEEN SOURCES</div>
+                <div className="desc">
+                  Cycle through the checked sources below, advancing every refresh interval
+                </div>
+              </div>
+            </div>
           </div>
 
           {MAIN_OPTIONS.map((opt) => (
-            <div key={opt.key} className={`card ${selected === opt.key ? 'active' : ''}`}>
+            <div key={opt.key} className={`card ${isActive(opt.key) ? 'active' : ''}`}>
               <div
                 className="card-head"
-                onClick={() => patch((d) => (d.main.selected = opt.key))}
-                role="radio"
-                aria-checked={selected === opt.key}
+                onClick={() => pickSource(opt.key)}
+                role={rotate ? 'checkbox' : 'radio'}
+                aria-checked={isActive(opt.key)}
               >
-                <span className={`pip ${selected === opt.key ? 'on' : ''}`} />
+                <span className={`pip ${isActive(opt.key) ? 'on' : ''}`} />
                 <div>
                   <div className="name">{opt.name}</div>
                   <div className="desc">{opt.desc}</div>
                 </div>
               </div>
 
-              {selected === opt.key && (
+              {isActive(opt.key) && (
                 <div className="card-body">
                   {opt.key === 'weather' && (
                     <div className="field">
@@ -172,12 +209,23 @@ export function SettingsPage() {
                       </select>
                     </div>
                   )}
+                  {opt.key === 'prayer' && (
+                    <div className="field">
+                      <label>LOCATION — CITY NAME</label>
+                      <input
+                        value={cfg.main.prayer?.location ?? ''}
+                        onChange={(e) => patch((d) => (d.main.prayer.location = e.target.value))}
+                        placeholder="Dubai"
+                      />
+                    </div>
+                  )}
                   <div className="actions">
                     <button
                       onClick={() =>
                         runTest(opt.key, {
                           location: cfg.main.weather.location,
                           coin: cfg.main.crypto.coin,
+                          prayerLocation: cfg.main.prayer?.location,
                         })
                       }
                       disabled={tests[opt.key]?.status === 'busy'}

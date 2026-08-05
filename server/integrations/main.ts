@@ -1,6 +1,6 @@
 import { getConfig, type MainSource } from '../config.js';
 import { board } from '../state.js';
-import { tokenize, centerLine, linesToCells } from '../format.js';
+import { tokenize, centerLine, linesToCells, formatToCells } from '../format.js';
 import { ROWS } from '../../shared/charset.js';
 
 const WEATHER_CODES: Record<number, string> = {
@@ -142,6 +142,126 @@ export async function fetchCrypto(coin: string): Promise<{ text: string; cells: 
   };
 }
 
+// A curated drum of words for Word of the Day; the date picks deterministically.
+const WORDS = [
+  'SERENDIPITY', 'PETRICHOR', 'EPHEMERAL', 'LUMINOUS', 'SONDER', 'HIRAETH',
+  'MELLIFLUOUS', 'HALCYON', 'ELOQUENT', 'SOLITUDE', 'WANDERLUST', 'EUPHORIA',
+  'LABYRINTH', 'NEBULOUS', 'QUIXOTIC', 'RESILIENCE', 'SYMPHONY', 'TRANQUIL',
+  'UBIQUITOUS', 'VERDANT', 'WHIMSICAL', 'ZENITH', 'ALCHEMY', 'CASCADE',
+  'DICHOTOMY', 'EBULLIENT', 'FORTITUDE', 'GOSSAMER', 'IRIDESCENT', 'JUXTAPOSE',
+  'KALEIDOSCOPE', 'LANGUID', 'MERAKI', 'NOSTALGIA', 'OBLIVION', 'PANACEA',
+  'QUINTESSENCE', 'REVERIE', 'SONOROUS', 'TESSELLATE', 'UMBRAGE', 'VELLICHOR',
+  'ZEPHYR', 'APRICITY', 'BUCOLIC', 'CYNOSURE', 'DULCET', 'ELYSIAN',
+  'FELICITY', 'GRANDILOQUENT', 'INEFFABLE', 'LIMERENCE', 'MOXIE', 'NADIR',
+  'OPULENT', 'PERSPICACIOUS', 'RHAPSODY', 'SAGACIOUS', 'TACITURN', 'UNDULATE',
+  'VESTIGE', 'WINSOME', 'AURORA', 'BREVITY', 'CANDOR', 'DILIGENT',
+  'EFFERVESCENT', 'FATHOM', 'GARRULOUS', 'HUBRIS', 'IMPETUS', 'JOVIAL',
+  'KINETIC', 'LUCID', 'MAVERICK', 'NUANCE', 'OSCILLATE', 'PARAGON',
+  'QUANDARY', 'RECALCITRANT', 'STOIC', 'TENACIOUS', 'UNCTUOUS', 'VORACIOUS',
+].map((w) => w.replace(/[^A-Z]/gi, '').toUpperCase());
+
+export async function fetchWord(): Promise<{ text: string; cells: string[] }> {
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  const word = WORDS[dayIndex % WORDS.length];
+  let partOfSpeech = '';
+  let definition = '';
+  try {
+    const data = await getJson(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`,
+    );
+    const meaning = data?.[0]?.meanings?.[0];
+    partOfSpeech = meaning?.partOfSpeech ?? '';
+    definition = meaning?.definitions?.[0]?.definition ?? '';
+  } catch {
+    // dictionary miss: still show the word on its own
+  }
+  const body = [`{blue} WORD OF THE DAY {blue}`, '', word];
+  if (definition) {
+    body.push(partOfSpeech ? `(${partOfSpeech}) ${definition}` : definition);
+  }
+  return {
+    text: `${word}: ${definition}`,
+    cells: formatToCells(body.join('\n')),
+  };
+}
+
+export async function fetchIss(): Promise<{ text: string; cells: string[] }> {
+  const iss = await getJson('https://api.wheretheiss.at/v1/satellites/25544');
+  let over = 'THE OPEN OCEAN';
+  try {
+    const geo = await getJson(
+      `https://api.wheretheiss.at/v1/coordinates/${iss.latitude},${iss.longitude}`,
+    );
+    if (geo?.country_code && geo.country_code !== '??') {
+      over =
+        new Intl.DisplayNames(['en'], { type: 'region' }).of(geo.country_code) ??
+        geo.country_code;
+    }
+  } catch {
+    // coordinates endpoint is best-effort
+  }
+  const lat = `${Math.abs(iss.latitude).toFixed(1)}°${iss.latitude >= 0 ? 'N' : 'S'}`;
+  const lon = `${Math.abs(iss.longitude).toFixed(1)}°${iss.longitude >= 0 ? 'E' : 'W'}`;
+  const lines = [
+    tokenize(`{blue} ISS RIGHT NOW {blue}`),
+    tokenize(`OVER ${over.toUpperCase()}`),
+    tokenize(`${lat} ${lon}`),
+    tokenize(`ALT ${Math.round(iss.altitude)} KM`),
+    tokenize(`${Math.round(iss.velocity).toLocaleString('en-US')} KM/H`),
+  ];
+  return {
+    text: `ISS over ${over}, ${Math.round(iss.altitude)} km`,
+    cells: centeredBlock(lines),
+  };
+}
+
+const PRAYER_ORDER = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const;
+
+export async function fetchPrayer(location: string): Promise<{ text: string; cells: string[] }> {
+  const geo = await getJson(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en`,
+  );
+  const hit = geo?.results?.[0];
+  if (!hit) throw new Error(`Location "${location}" not found`);
+  const data = await getJson(
+    `https://api.aladhan.com/v1/timings?latitude=${hit.latitude}&longitude=${hit.longitude}`,
+  );
+  const timings = data?.data?.timings;
+  const tz = data?.data?.meta?.timezone;
+  if (!timings) throw new Error('Aladhan returned no timings');
+
+  // current HH:MM in the location's timezone, to find the next prayer
+  const nowHM = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: tz,
+  }).format(new Date());
+  const next =
+    PRAYER_ORDER.find((p) => String(timings[p]) > nowHM) ?? PRAYER_ORDER[0];
+
+  const lines = [tokenize(`{green} ${hit.name.toUpperCase()} PRAYERS {green}`)];
+  for (const p of PRAYER_ORDER) {
+    const name = p.toUpperCase().padEnd(9, ' ');
+    const marker = p === next ? '{green} ' : '';
+    lines.push(tokenize(`${marker}${name}${timings[p]}`));
+  }
+  const grid = lines.slice(0, ROWS).map((l) => centerLine(l));
+  return {
+    text: `Next prayer ${next} at ${timings[next]}`,
+    cells: linesToCells(grid),
+  };
+}
+
+export async function fetchFacts(): Promise<{ text: string; cells: string[] }> {
+  const data = await getJson('https://uselessfacts.jsph.pl/api/v2/facts/random?language=en');
+  if (!data?.text) throw new Error('No fact returned');
+  return {
+    text: data.text,
+    cells: formatToCells(`{orange} DID YOU KNOW? {orange}\n${data.text}`),
+  };
+}
+
 export async function fetchMain(source: MainSource): Promise<{ text: string; cells?: string[] }> {
   const cfg = getConfig();
   switch (source) {
@@ -153,18 +273,32 @@ export async function fetchMain(source: MainSource): Promise<{ text: string; cel
       return fetchNews();
     case 'crypto':
       return fetchCrypto(cfg.main.crypto.coin);
+    case 'word':
+      return fetchWord();
+    case 'iss':
+      return fetchIss();
+    case 'prayer':
+      return fetchPrayer(cfg.main.prayer.location);
+    case 'facts':
+      return fetchFacts();
   }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let rotationIndex = 0;
 
 export async function refreshMain(): Promise<void> {
   const cfg = getConfig();
+  let source = cfg.main.selected;
+  if (cfg.main.rotate && cfg.main.rotationSources.length > 0) {
+    source = cfg.main.rotationSources[rotationIndex % cfg.main.rotationSources.length];
+    rotationIndex++;
+  }
   try {
-    const { text, cells } = await fetchMain(cfg.main.selected);
+    const { text, cells } = await fetchMain(source);
     board.setMain(text, cells ?? undefined);
   } catch (err) {
-    console.error(`[main:${cfg.main.selected}]`, (err as Error).message);
+    console.error(`[main:${source}]`, (err as Error).message);
   }
 }
 

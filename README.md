@@ -37,9 +37,12 @@ auto-hides after 5 seconds without mouse movement and comes back on hover.
 
 ## Settings (`/settings`)
 
-- **Main source** (single select): Weather (Open-Meteo), Quote of the Day
-  (ZenQuotes), News (Hacker News), Crypto (CoinGecko). All keyless. A refresh
-  interval (default 5 min) controls how often it re-fetches.
+- **Main source**: Weather (Open-Meteo), Quote of the Day (ZenQuotes), News
+  (Hacker News), Crypto (CoinGecko), Word of the Day (Free Dictionary), ISS
+  Tracker (wheretheiss.at), Prayer Times (Aladhan), Random Fact (uselessfacts).
+  All keyless. A refresh interval (default 5 min) controls how often it
+  re-fetches. Pick one source, or enable **Rotate Between Sources** to cycle
+  through any combination, advancing one source per interval.
 - **Message integrations** (any combination):
   - **Telegram** — paste a bot token from @BotFather. The backend long-polls
     `getUpdates`, so no public URL is required. DM your bot and the message
