@@ -128,7 +128,7 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <div className="settings-inner">
-        <Link to="/" className="back-link">← BACK TO BOARD</Link>
+        <Link to="/board" className="back-link">← BACK TO BOARD</Link>
         <Wordmark />
         <h1>SETTINGS</h1>
         <p className="subtitle">
