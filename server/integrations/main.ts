@@ -262,6 +262,122 @@ export async function fetchFacts(): Promise<{ text: string; cells: string[] }> {
   };
 }
 
+async function resolveLocation(location: string): Promise<{ lat: number; lon: number; name: string }> {
+  const coordMatch = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (coordMatch) {
+    return { lat: parseFloat(coordMatch[1]), lon: parseFloat(coordMatch[2]), name: 'YOU' };
+  }
+  const geo = await getJson(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en`,
+  );
+  const hit = geo?.results?.[0];
+  if (!hit) throw new Error(`Location "${location}" not found`);
+  return { lat: hit.latitude, lon: hit.longitude, name: hit.name };
+}
+
+// friendly names for the most common ICAO type designators
+const AIRCRAFT_TYPES: Record<string, string> = {
+  A388: 'AIRBUS A380',
+  A38F: 'AIRBUS A380',
+  B77W: 'BOEING 777',
+  B77L: 'BOEING 777',
+  B772: 'BOEING 777',
+  B773: 'BOEING 777',
+  B788: 'BOEING 787',
+  B789: 'BOEING 787',
+  B78X: 'BOEING 787',
+  B744: 'BOEING 747',
+  B748: 'BOEING 747',
+  A359: 'AIRBUS A350',
+  A35K: 'AIRBUS A350',
+  A333: 'AIRBUS A330',
+  A332: 'AIRBUS A330',
+  A339: 'AIRBUS A330',
+  A320: 'AIRBUS A320',
+  A20N: 'AIRBUS A320',
+  A321: 'AIRBUS A321',
+  A21N: 'AIRBUS A321',
+  A319: 'AIRBUS A319',
+  B738: 'BOEING 737',
+  B38M: 'BOEING 737 MAX',
+  B739: 'BOEING 737',
+  B737: 'BOEING 737',
+  E190: 'EMBRAER E190',
+  E195: 'EMBRAER E195',
+  AT76: 'ATR 72',
+  DH8D: 'DASH 8',
+};
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+function bearingFrom(lat1: number, lon1: number, lat2: number, lon2: number): string {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  return COMPASS[Math.round(deg / 45) % 8];
+}
+
+const RADIUS_NM = 30;
+
+export async function fetchFlights(location: string): Promise<{ text: string; cells: string[] }> {
+  const { lat, lon } = await resolveLocation(location);
+  const data = await getJson(`https://api.adsb.lol/v2/point/${lat}/${lon}/${RADIUS_NM}`);
+  const aircraft = (data?.ac ?? [])
+    .filter((a: any) => a.flight?.trim() && a.alt_baro !== 'ground' && a.lat != null)
+    .sort((a: any, b: any) => (a.dst ?? 999) - (b.dst ?? 999));
+
+  if (!aircraft.length) {
+    return {
+      text: 'Quiet skies above',
+      cells: formatToCells(`{blue} OVERHEAD NOW {blue}\n\nQUIET SKIES ABOVE`),
+    };
+  }
+
+  const ac = aircraft[0];
+  const callsign = ac.flight.trim().toUpperCase();
+
+  // best-effort route lookup (DXB - JFK) from the same provider
+  let route = '';
+  try {
+    const rs: any = await fetch('https://api.adsb.lol/api/0/routeset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planes: [{ callsign, lat: ac.lat, lng: ac.lon }] }),
+      signal: AbortSignal.timeout(10000),
+    }).then((r) => (r.ok ? r.json() : null));
+    const iata = rs?.[0]?._airport_codes_iata ?? rs?.[0]?.airport_codes;
+    if (iata && iata !== 'unknown') route = iata.replace(/-/g, ' - ').toUpperCase();
+  } catch {
+    // route unknown: skip the line
+  }
+
+  const type = AIRCRAFT_TYPES[ac.t] ?? ac.t ?? '';
+  const altFt = typeof ac.alt_baro === 'number' ? ac.alt_baro : null;
+  const kmh = ac.gs != null ? Math.round(ac.gs * 1.852) : null;
+  const distKm = ac.dst != null ? Math.round(ac.dst * 1.852) : null;
+  const dir = bearingFrom(lat, lon, ac.lat, ac.lon);
+
+  const lines = [tokenize(`{blue} OVERHEAD NOW {blue}`), tokenize(`${callsign} ${type}`.trim())];
+  if (route) lines.push(tokenize(route));
+  const stats = [
+    altFt != null ? `${altFt.toLocaleString('en-US')} FT` : '',
+    kmh != null ? `${kmh} KM/H` : '',
+  ]
+    .filter(Boolean)
+    .join('  ');
+  if (stats) lines.push(tokenize(stats));
+  if (distKm != null) lines.push(tokenize(`${distKm} KM ${dir} OF YOU`));
+
+  return {
+    text: `${callsign} ${type} ${route || ''} ${distKm ?? '?'} km away`.replace(/\s+/g, ' '),
+    cells: centeredBlock(lines),
+  };
+}
+
 export async function fetchMain(source: MainSource): Promise<{ text: string; cells?: string[] }> {
   const cfg = getConfig();
   switch (source) {
@@ -281,6 +397,8 @@ export async function fetchMain(source: MainSource): Promise<{ text: string; cel
       return fetchPrayer(cfg.main.prayer.location);
     case 'facts':
       return fetchFacts();
+    case 'flights':
+      return fetchFlights(cfg.main.flights.location);
   }
 }
 

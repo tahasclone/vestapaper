@@ -22,6 +22,7 @@ const MAIN_OPTIONS = [
   { key: 'iss', name: 'ISS TRACKER', desc: 'wheretheiss.at · live position, altitude, speed' },
   { key: 'prayer', name: 'PRAYER TIMES', desc: 'Aladhan · today’s times, next prayer marked' },
   { key: 'facts', name: 'RANDOM FACT', desc: 'uselessfacts · a new fact every refresh' },
+  { key: 'flights', name: 'FLIGHT OVERHEAD', desc: 'adsb.lol · nearest aircraft, route + distance' },
 ] as const;
 
 async function api(path: string, body?: unknown) {
@@ -219,6 +220,37 @@ export function SettingsPage() {
                       />
                     </div>
                   )}
+                  {opt.key === 'flights' && (
+                    <div className="row">
+                      <div className="field">
+                        <label>LOCATION — CITY NAME OR "LAT, LON"</label>
+                        <input
+                          value={cfg.main.flights?.location ?? ''}
+                          onChange={(e) => patch((d) => (d.main.flights.location = e.target.value))}
+                          placeholder="Dubai"
+                        />
+                      </div>
+                      <div className="actions" style={{ marginTop: 18 }}>
+                        <button
+                          onClick={() =>
+                            navigator.geolocation?.getCurrentPosition(
+                              (pos) =>
+                                patch(
+                                  (d) =>
+                                    (d.main.flights.location = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`),
+                                ),
+                              () => setTests((t) => ({
+                                ...t,
+                                flights: { status: 'err', detail: 'Location permission denied' },
+                              })),
+                            )
+                          }
+                        >
+                          USE MY LOCATION
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="actions">
                     <button
                       onClick={() =>
@@ -226,6 +258,7 @@ export function SettingsPage() {
                           location: cfg.main.weather.location,
                           coin: cfg.main.crypto.coin,
                           prayerLocation: cfg.main.prayer?.location,
+                          flightsLocation: cfg.main.flights?.location,
                         })
                       }
                       disabled={tests[opt.key]?.status === 'busy'}

@@ -16,6 +16,7 @@ import {
   fetchIss,
   fetchPrayer,
   fetchFacts,
+  fetchFlights,
 } from './integrations/main.js';
 import {
   applyMessageConfig,
@@ -83,6 +84,9 @@ app.post('/api/test/:integration', async (req, res) => {
         break;
       case 'facts':
         detail = (await fetchFacts()).text.slice(0, 120);
+        break;
+      case 'flights':
+        detail = (await fetchFlights(req.body?.flightsLocation ?? cfg.main.flights.location)).text;
         break;
       case 'telegram':
         detail = await testTelegram(

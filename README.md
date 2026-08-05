@@ -39,7 +39,10 @@ auto-hides after 5 seconds without mouse movement and comes back on hover.
 
 - **Main source**: Weather (Open-Meteo), Quote of the Day (ZenQuotes), News
   (Hacker News), Crypto (CoinGecko), Word of the Day (Free Dictionary), ISS
-  Tracker (wheretheiss.at), Prayer Times (Aladhan), Random Fact (uselessfacts).
+  Tracker (wheretheiss.at), Prayer Times (Aladhan), Random Fact (uselessfacts),
+  Flight Overhead (adsb.lol — nearest aircraft within 30 nm, with type, route,
+  altitude, speed, and distance; a "use my location" button fills in exact
+  coordinates from the browser).
   All keyless. A refresh interval (default 5 min) controls how often it
   re-fetches. Pick one source, or enable **Rotate Between Sources** to cycle
   through any combination, advancing one source per interval.

@@ -14,7 +14,8 @@ export type MainSource =
   | 'word'
   | 'iss'
   | 'prayer'
-  | 'facts';
+  | 'facts'
+  | 'flights';
 
 export interface Config {
   main: {
@@ -25,6 +26,7 @@ export interface Config {
     weather: { location: string };
     crypto: { coin: string };
     prayer: { location: string };
+    flights: { location: string };
   };
   messages: {
     telegram: { enabled: boolean; botToken: string };
@@ -38,11 +40,12 @@ export const DEFAULT_CONFIG: Config = {
   main: {
     selected: 'quotes',
     rotate: false,
-    rotationSources: ['word', 'iss', 'prayer', 'facts'],
+    rotationSources: ['word', 'iss', 'prayer', 'facts', 'flights'],
     refreshMinutes: 5,
     weather: { location: 'Dubai' },
     crypto: { coin: 'bitcoin' },
     prayer: { location: 'Dubai' },
+    flights: { location: 'Dubai' },
   },
   messages: {
     telegram: { enabled: false, botToken: '' },
