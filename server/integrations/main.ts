@@ -1,5 +1,4 @@
-import { getConfig, type MainSource } from '../config.js';
-import { board } from '../state.js';
+import type { Config, MainSource } from '../config.js';
 import { tokenize, centerLine, linesToCells, formatToCells } from '../../shared/format.js';
 import { FULL_BOARD, type BoardSize } from '../../shared/charset.js';
 
@@ -419,7 +418,7 @@ export interface SourceParams {
   flightsLocation: string;
 }
 
-export function paramsFromConfig(cfg: ReturnType<typeof getConfig>): SourceParams {
+export function paramsFromConfig(cfg: Config): SourceParams {
   return {
     weatherLocation: cfg.main.weather.location,
     coin: cfg.main.crypto.coin,
@@ -467,34 +466,4 @@ export async function renderSized(
   const { text, cells } = await fetchSource(source, params, size);
   if (cells && fitsLayout(size)) return { text, cells };
   return { text, cells: formatToCells(text, size) };
-}
-
-export async function fetchMain(source: MainSource): Promise<{ text: string; cells?: string[] }> {
-  return fetchSource(source, paramsFromConfig(getConfig()));
-}
-
-let timer: ReturnType<typeof setInterval> | null = null;
-let rotationIndex = 0;
-
-export async function refreshMain(): Promise<void> {
-  const cfg = getConfig();
-  let source = cfg.main.selected;
-  if (cfg.main.rotate && cfg.main.rotationSources.length > 0) {
-    source = cfg.main.rotationSources[rotationIndex % cfg.main.rotationSources.length];
-    rotationIndex++;
-  }
-  try {
-    const { text, cells } = await fetchMain(source);
-    board.setMain(text, cells ?? undefined);
-  } catch (err) {
-    console.error(`[main:${source}]`, (err as Error).message);
-  }
-}
-
-/** (Re)start the refresh schedule. Call on boot and whenever config changes. */
-export function scheduleMain(): void {
-  if (timer) clearInterval(timer);
-  const minutes = Math.max(1, getConfig().main.refreshMinutes || 5);
-  timer = setInterval(refreshMain, minutes * 60 * 1000);
-  void refreshMain();
 }

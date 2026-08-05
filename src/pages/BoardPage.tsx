@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { useBoardState } from '../board/useBoardState';
 import { configureSound } from '../board/sound';
@@ -16,7 +16,9 @@ function GearIcon() {
 }
 
 export function BoardPage() {
-  const { cells, rows, cols, sound } = useBoardState();
+  const { token } = useParams<{ token: string }>();
+  const { state } = useBoardState(token ?? null);
+  const { cells, rows, cols, sound } = state;
 
   useEffect(() => {
     configureSound(sound?.enabled ?? false, sound?.volume ?? 0.4);

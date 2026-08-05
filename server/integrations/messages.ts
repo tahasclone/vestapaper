@@ -1,164 +1,91 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
-import { SocketModeClient } from '@slack/socket-mode';
-import { WebClient } from '@slack/web-api';
-import { getConfig } from '../config.js';
-import { board } from '../state.js';
+/**
+ * Credential validation for the message integrations.
+ *
+ * There are deliberately no long-lived connections here. Inbound messages
+ * arrive by webhook (see server/hooks.ts), because a hosted board cannot run a
+ * Telegram poll loop, a Discord gateway client and a Slack socket per user.
+ * These helpers only check that what a user pasted actually works, so the
+ * settings UI can say so before saving.
+ */
 
-// ---------------------------------------------------------------- Telegram
-
-let telegramGeneration = 0;
-
-async function runTelegram(token: string, generation: number) {
-  let offset = 0;
-  console.log('[telegram] long-polling started');
-  while (generation === telegramGeneration) {
-    try {
-      const res = await fetch(
-        `https://api.telegram.org/bot${token}/getUpdates?timeout=30&offset=${offset}`,
-        { signal: AbortSignal.timeout(45000) },
-      );
-      const data: any = await res.json();
-      if (!data.ok) {
-        if (data.error_code === 401) {
-          console.error('[telegram] invalid bot token, stopping');
-          return;
-        }
-        throw new Error(data.description ?? 'getUpdates failed');
-      }
-      for (const update of data.result ?? []) {
-        offset = update.update_id + 1;
-        const text = update.message?.text ?? update.channel_post?.text;
-        if (text && generation === telegramGeneration) {
-          // never log message text — it's someone's private DM
-          console.log(`[telegram] message received (${text.length} chars)`);
-          board.showMessage(text);
-        }
-      }
-    } catch (err) {
-      if (generation !== telegramGeneration) return;
-      console.error('[telegram]', (err as Error).message);
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
+export interface TelegramIdentity {
+  botId: string;
+  username: string;
 }
 
-// ---------------------------------------------------------------- Discord
-
-let discordClient: Client | null = null;
-
-async function startDiscord(token: string, channelId: string) {
-  discordClient = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.DirectMessages,
-    ],
-  });
-  discordClient.on(Events.MessageCreate, (msg) => {
-    if (msg.author.bot) return;
-    if (channelId && msg.channelId !== channelId) return;
-    const text = msg.cleanContent || msg.content;
-    if (text) {
-      console.log(`[discord] message received (${text.length} chars)`);
-      board.showMessage(text);
-    }
-  });
-  discordClient.once(Events.ClientReady, (c) =>
-    console.log(`[discord] connected as ${c.user.tag}`),
-  );
-  try {
-    await discordClient.login(token);
-  } catch (err) {
-    console.error('[discord] login failed:', (err as Error).message);
-  }
-}
-
-// ---------------------------------------------------------------- Slack
-
-let slackClient: SocketModeClient | null = null;
-
-async function startSlack(appToken: string) {
-  slackClient = new SocketModeClient({ appToken });
-  slackClient.on('message', async ({ event, ack }: any) => {
-    await ack();
-    if (event?.bot_id || event?.subtype) return;
-    if (event?.text) {
-      console.log(`[slack] message received (${String(event.text).length} chars)`);
-      board.showMessage(event.text);
-    }
-  });
-  try {
-    await slackClient.start();
-    console.log('[slack] socket mode connected');
-  } catch (err) {
-    console.error('[slack] connection failed:', (err as Error).message);
-  }
-}
-
-// ---------------------------------------------------------------- Lifecycle
-
-/** Stop everything and start whatever the current config enables. */
-export async function applyMessageConfig(): Promise<void> {
-  telegramGeneration++;
-  if (discordClient) {
-    void discordClient.destroy();
-    discordClient = null;
-  }
-  if (slackClient) {
-    void slackClient.disconnect().catch(() => {});
-    slackClient = null;
-  }
-
-  const { messages } = getConfig();
-  if (messages.telegram.enabled && messages.telegram.botToken) {
-    void runTelegram(messages.telegram.botToken, telegramGeneration);
-  }
-  if (messages.discord.enabled && messages.discord.botToken) {
-    void startDiscord(messages.discord.botToken, messages.discord.channelId);
-  }
-  if (messages.slack.enabled && messages.slack.appToken) {
-    void startSlack(messages.slack.appToken);
-  }
-}
-
-// ---------------------------------------------------------------- Tests
-
-export async function testTelegram(token: string): Promise<string> {
+export async function verifyTelegramToken(token: string): Promise<TelegramIdentity> {
   const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(10_000),
   });
   const data: any = await res.json();
-  if (!data.ok) throw new Error(data.description ?? 'Invalid token');
-  return `Connected as @${data.result.username}`;
+  if (!data.ok) throw new Error(data.description ?? 'Invalid bot token');
+  return { botId: String(data.result.id), username: data.result.username };
 }
 
-export async function testDiscord(token: string, channelId: string): Promise<string> {
-  const res = await fetch('https://discord.com/api/v10/users/@me', {
+/** Point a bot at our per-board webhook URL. Replaces getUpdates polling. */
+export async function setTelegramWebhook(
+  token: string,
+  url: string,
+  secret: string,
+): Promise<void> {
+  const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      secret_token: secret,
+      allowed_updates: ['message', 'channel_post'],
+      drop_pending_updates: true,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data: any = await res.json();
+  if (!data.ok) throw new Error(data.description ?? 'setWebhook failed');
+}
+
+/** Hand the bot back to whoever wants to poll it. */
+export async function clearTelegramWebhook(token: string): Promise<void> {
+  await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => {});
+}
+
+export interface DiscordIdentity {
+  applicationId: string;
+  username: string;
+}
+
+export async function verifyDiscordToken(token: string): Promise<DiscordIdentity> {
+  const res = await fetch('https://discord.com/api/v10/applications/@me', {
     headers: { Authorization: `Bot ${token}` },
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error('Invalid bot token');
-  const me: any = await res.json();
-  if (channelId) {
-    const ch = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
-      headers: { Authorization: `Bot ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!ch.ok) throw new Error(`Token OK (${me.username}) but channel ${channelId} is not accessible`);
-  }
-  return `Connected as ${me.username}`;
+  const app: any = await res.json();
+  return { applicationId: String(app.id), username: app.name ?? 'bot' };
 }
 
-export async function testSlack(botToken: string, appToken: string): Promise<string> {
-  const auth: any = await new WebClient(botToken).auth.test();
-  if (!auth.ok) throw new Error('Invalid bot token');
-  const res = await fetch('https://slack.com/api/apps.connections.open', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${appToken}` },
-    signal: AbortSignal.timeout(10000),
+/**
+ * Register the /board slash command for the user's app. The Discord developer
+ * portal has no command builder, so doing it here saves them a curl.
+ */
+export async function registerBoardCommand(token: string, applicationId: string): Promise<void> {
+  const res = await fetch(`https://discord.com/api/v10/applications/${applicationId}/commands`, {
+    method: 'PUT',
+    headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([
+      {
+        name: 'board',
+        description: 'Put a message on your Solaris board for 60 seconds',
+        options: [
+          { name: 'text', description: 'What the board should say', type: 3, required: true },
+        ],
+      },
+    ]),
+    signal: AbortSignal.timeout(10_000),
   });
-  const conn: any = await res.json();
-  if (!conn.ok) throw new Error(`Bot token OK but app token failed: ${conn.error}`);
-  return `Connected to ${auth.team} as ${auth.user}`;
+  if (!res.ok) {
+    throw new Error(`Could not register the /board command (${res.status})`);
+  }
 }

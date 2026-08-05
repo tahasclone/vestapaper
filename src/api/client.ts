@@ -72,28 +72,41 @@ export function getBoardState(
   since?: number,
   signal?: AbortSignal,
 ): Promise<BoardStateResponse> {
-  const base = token ? `/api/b/${encodeURIComponent(token)}/state` : '/api/board-state';
+  if (!token) throw new ApiError(400, 'No board token');
   const qs = since ? `?since=${since}` : '';
-  return request<BoardStateResponse>(`${base}${qs}`, { signal });
+  return request<BoardStateResponse>(
+    `/api/b/${encodeURIComponent(token)}/state${qs}`,
+    { signal },
+  );
 }
 
-// ----------------------------------------------------------------- config
+// -------------------------------------------------------------- account
 
-export function getConfig<T = any>(): Promise<T> {
-  return request<T>('/api/config');
+export interface Me {
+  user: { email: string; name?: string; pictureUrl?: string } | null;
+  board: { token: string; rows: number; cols: number; boardUrl: string };
+  config: any;
 }
 
-export function saveConfig<T = any>(patch: unknown): Promise<T> {
-  return request<T>('/api/config', { body: patch });
+export function getMe(): Promise<Me> {
+  return request<Me>('/api/me');
+}
+
+export function saveConfig(patch: unknown): Promise<{ ok: boolean; config: any }> {
+  return request('/api/board/config', { body: patch });
 }
 
 export function sendMessage(text: string): Promise<{ ok: boolean; error?: string }> {
-  return request('/api/message', { body: { text } });
+  return request('/api/board/message', { body: { text } });
 }
 
 export function testSource(
   key: string,
-  extra: Record<string, unknown> = {},
+  patch: Record<string, unknown> = {},
 ): Promise<{ ok: boolean; detail?: string; error?: string }> {
-  return request(`/api/test/${encodeURIComponent(key)}`, { body: extra });
+  return request(`/api/board/test/${encodeURIComponent(key)}`, { body: patch });
+}
+
+export function rotateBoardToken(): Promise<{ ok: boolean; token: string; boardUrl: string }> {
+  return request('/api/board/rotate-token', { body: {} });
 }

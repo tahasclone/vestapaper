@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getConfig, saveConfig, sendMessage, testSource } from '../api/client';
+import {
+  getMe,
+  rotateBoardToken,
+  saveConfig,
+  sendMessage,
+  testSource,
+  type Me,
+} from '../api/client';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { formatToCells } from '../../shared/format';
 
@@ -41,16 +48,34 @@ function Wordmark() {
 
 export function SettingsPage() {
   const [cfg, setCfg] = useState<any>(null);
+  const [board, setBoard] = useState<Me['board'] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tests, setTests] = useState<Record<string, TestState>>({});
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [customText, setCustomText] = useState('');
   const [sendState, setSendState] = useState<TestState>({ status: 'idle' });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    getConfig().then(setCfg).catch(() => {});
+    getMe()
+      .then((me) => {
+        setCfg(me.config);
+        setBoard(me.board);
+      })
+      .catch((e) => setLoadError(e.message));
   }, []);
 
-  if (!cfg) {
+  if (loadError) {
+    return (
+      <div className="settings">
+        <div className="settings-inner">
+          <p className="subtitle">COULD NOT LOAD YOUR BOARD: {loadError.toUpperCase()}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cfg || !board) {
     return (
       <div className="settings">
         <div className="settings-inner">
@@ -67,16 +92,21 @@ export function SettingsPage() {
   };
 
   const save = async (label: string) => {
-    const fresh = await saveConfig(cfg);
-    setCfg(fresh);
-    setSavedFlash(label);
-    setTimeout(() => setSavedFlash(null), 2200);
+    try {
+      const { config } = await saveConfig({ main: cfg.main, sound: cfg.sound });
+      setCfg(config);
+      setSavedFlash(label);
+      setTimeout(() => setSavedFlash(null), 2200);
+    } catch (e) {
+      setSavedFlash(null);
+      setTests((t) => ({ ...t, _save: { status: 'err', detail: (e as Error).message } }));
+    }
   };
 
-  const runTest = async (key: string, extra: Record<string, unknown> = {}) => {
+  const runTest = async (key: string) => {
     setTests((t) => ({ ...t, [key]: { status: 'busy' } }));
     try {
-      const r = await testSource(key, { messages: cfg.messages, ...extra });
+      const r = await testSource(key, { main: cfg.main });
       setTests((t) => ({
         ...t,
         [key]: r.ok ? { status: 'ok', detail: r.detail } : { status: 'err', detail: r.error },
@@ -128,12 +158,51 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <div className="settings-inner">
-        <Link to="/board" className="back-link">← BACK TO BOARD</Link>
+        <Link to={`/b/${board.token}`} className="back-link">← BACK TO BOARD</Link>
         <Wordmark />
         <h1>SETTINGS</h1>
         <p className="subtitle">
           One main source feeds the board. Messages interrupt it for 60 seconds, then it flips back.
         </p>
+
+        {/* -------------------------------------------------- board URL */}
+        <div className="section">
+          <div className="section-label">
+            YOUR BOARD <span className="hint">point Plash at this URL</span>
+          </div>
+          <div className="card active">
+            <div className="field">
+              <label>BOARD URL</label>
+              <div className="row" style={{ gap: 8 }}>
+                <input readOnly value={board.boardUrl} onFocus={(e) => e.currentTarget.select()} />
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard?.writeText(board.boardUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                >
+                  {copied ? 'COPIED' : 'COPY'}
+                </button>
+              </div>
+            </div>
+            <p className="save-note">
+              Anyone with this link can see your board, so keep it to yourself. Regenerating it
+              breaks the old link, and your wallpaper stays blank until you re-point Plash.
+            </p>
+            <div className="actions">
+              <button
+                onClick={async () => {
+                  if (!confirm('Generate a new board URL? The current one stops working.')) return;
+                  const r = await rotateBoardToken();
+                  setBoard({ ...board, token: r.token, boardUrl: r.boardUrl });
+                }}
+              >
+                REGENERATE URL
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* ------------------------------------------------ main source */}
         <div className="section">
@@ -244,14 +313,7 @@ export function SettingsPage() {
                   )}
                   <div className="actions">
                     <button
-                      onClick={() =>
-                        runTest(opt.key, {
-                          location: cfg.main.weather.location,
-                          coin: cfg.main.crypto.coin,
-                          prayerLocation: cfg.main.prayer?.location,
-                          flightsLocation: cfg.main.flights?.location,
-                        })
-                      }
+                      onClick={() => runTest(opt.key)}
                       disabled={tests[opt.key]?.status === 'busy'}
                     >
                       TEST
@@ -335,141 +397,7 @@ export function SettingsPage() {
         {/* ------------------------------------------------- messages */}
         <div className="section">
           <div className="section-label">
-            MESSAGE INTEGRATIONS <span className="hint">any combination · newest message wins</span>
-          </div>
-
-          {/* Telegram */}
-          <div className={`card ${cfg.messages.telegram.enabled ? 'active' : ''}`}>
-            <div
-              className="card-head"
-              onClick={() => patch((d) => (d.messages.telegram.enabled = !d.messages.telegram.enabled))}
-            >
-              <span className={`pip ${cfg.messages.telegram.enabled ? 'on' : ''}`} />
-              <div>
-                <div className="name">TELEGRAM BOT</div>
-                <div className="desc">Long-polling — works locally, no public URL needed</div>
-              </div>
-            </div>
-            {cfg.messages.telegram.enabled && (
-              <div className="card-body">
-                <div className="field">
-                  <label>BOT TOKEN — FROM @BOTFATHER</label>
-                  <input
-                    type="password"
-                    value={cfg.messages.telegram.botToken}
-                    onChange={(e) => patch((d) => (d.messages.telegram.botToken = e.target.value))}
-                    placeholder="123456:ABC-DEF…"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="actions">
-                  <button onClick={() => runTest('telegram')} disabled={tests.telegram?.status === 'busy'}>
-                    TEST CONNECTION
-                  </button>
-                  <button className="primary" onClick={() => save('telegram')}>SAVE</button>
-                  {savedFlash === 'telegram' && <span className="test-result ok">✓ SAVED</span>}
-                  <TestResult id="telegram" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Discord */}
-          <div className={`card ${cfg.messages.discord.enabled ? 'active' : ''}`}>
-            <div
-              className="card-head"
-              onClick={() => patch((d) => (d.messages.discord.enabled = !d.messages.discord.enabled))}
-            >
-              <span className={`pip ${cfg.messages.discord.enabled ? 'on' : ''}`} />
-              <div>
-                <div className="name">DISCORD BOT</div>
-                <div className="desc">Gateway connection — listens to one channel</div>
-              </div>
-            </div>
-            {cfg.messages.discord.enabled && (
-              <div className="card-body">
-                <div className="row">
-                  <div className="field">
-                    <label>BOT TOKEN</label>
-                    <input
-                      type="password"
-                      value={cfg.messages.discord.botToken}
-                      onChange={(e) => patch((d) => (d.messages.discord.botToken = e.target.value))}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="field">
-                    <label>CHANNEL ID</label>
-                    <input
-                      value={cfg.messages.discord.channelId}
-                      onChange={(e) => patch((d) => (d.messages.discord.channelId = e.target.value))}
-                      placeholder="e.g. 1180000000000000000"
-                    />
-                  </div>
-                </div>
-                <p className="save-note">
-                  Enable MESSAGE CONTENT INTENT for the bot in the Discord developer portal.
-                </p>
-                <div className="actions">
-                  <button onClick={() => runTest('discord')} disabled={tests.discord?.status === 'busy'}>
-                    TEST CONNECTION
-                  </button>
-                  <button className="primary" onClick={() => save('discord')}>SAVE</button>
-                  {savedFlash === 'discord' && <span className="test-result ok">✓ SAVED</span>}
-                  <TestResult id="discord" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Slack */}
-          <div className={`card ${cfg.messages.slack.enabled ? 'active' : ''}`}>
-            <div
-              className="card-head"
-              onClick={() => patch((d) => (d.messages.slack.enabled = !d.messages.slack.enabled))}
-            >
-              <span className={`pip ${cfg.messages.slack.enabled ? 'on' : ''}`} />
-              <div>
-                <div className="name">SLACK</div>
-                <div className="desc">Socket Mode — inbound messages without a public URL</div>
-              </div>
-            </div>
-            {cfg.messages.slack.enabled && (
-              <div className="card-body">
-                <div className="row">
-                  <div className="field">
-                    <label>BOT TOKEN (XOXB-…)</label>
-                    <input
-                      type="password"
-                      value={cfg.messages.slack.botToken}
-                      onChange={(e) => patch((d) => (d.messages.slack.botToken = e.target.value))}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="field">
-                    <label>APP-LEVEL TOKEN (XAPP-…)</label>
-                    <input
-                      type="password"
-                      value={cfg.messages.slack.appToken}
-                      onChange={(e) => patch((d) => (d.messages.slack.appToken = e.target.value))}
-                      autoComplete="off"
-                    />
-                  </div>
-                </div>
-                <p className="save-note">
-                  Enable Socket Mode + the connections:write scope on the app-level token, and
-                  subscribe the bot to message events.
-                </p>
-                <div className="actions">
-                  <button onClick={() => runTest('slack')} disabled={tests.slack?.status === 'busy'}>
-                    TEST CONNECTION
-                  </button>
-                  <button className="primary" onClick={() => save('slack')}>SAVE</button>
-                  {savedFlash === 'slack' && <span className="test-result ok">✓ SAVED</span>}
-                  <TestResult id="slack" />
-                </div>
-              </div>
-            )}
+            MESSAGES <span className="hint">newest message wins, shows for 60 seconds</span>
           </div>
 
           {/* Custom message */}

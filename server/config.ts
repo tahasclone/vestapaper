@@ -1,22 +1,34 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_DIR = path.join(__dirname, '..', 'data');
-const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
+export const MAIN_SOURCES = [
+  'weather',
+  'quotes',
+  'news',
+  'crypto',
+  'word',
+  'iss',
+  'prayer',
+  'facts',
+  'flights',
+] as const;
 
-export type MainSource =
-  | 'weather'
-  | 'quotes'
-  | 'news'
-  | 'crypto'
-  | 'word'
-  | 'iss'
-  | 'prayer'
-  | 'facts'
-  | 'flights';
+export type MainSource = (typeof MAIN_SOURCES)[number];
 
+export const COINS = [
+  'bitcoin',
+  'ethereum',
+  'solana',
+  'dogecoin',
+  'ripple',
+  'cardano',
+] as const;
+
+/**
+ * Per-board preferences. Stored wholesale as boards.config JSONB: it is always
+ * read and written as a unit, holds no secrets, and needs no indexing, so a new
+ * source needs no migration. Credentials live in board_integrations instead,
+ * because those need per-column encryption and an indexed reverse lookup.
+ */
 export interface Config {
   main: {
     selected: MainSource;
@@ -28,16 +40,7 @@ export interface Config {
     prayer: { location: string };
     flights: { location: string };
   };
-  sound: {
-    enabled: boolean;
-    volume: number; // 0..1
-  };
-  messages: {
-    telegram: { enabled: boolean; botToken: string };
-    discord: { enabled: boolean; botToken: string; channelId: string };
-    slack: { enabled: boolean; botToken: string; appToken: string };
-    custom: { enabled: boolean };
-  };
+  sound: { enabled: boolean; volume: number };
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -52,23 +55,52 @@ export const DEFAULT_CONFIG: Config = {
     flights: { location: 'Dubai' },
   },
   sound: { enabled: false, volume: 0.4 },
-  messages: {
-    telegram: { enabled: false, botToken: '' },
-    discord: { enabled: false, botToken: '', channelId: '' },
-    slack: { enabled: false, botToken: '', appToken: '' },
-    custom: { enabled: true },
-  },
 };
 
-// Keys that would let a JSON payload reach through to Object.prototype.
+// Letters (any script), digits, spaces and a little punctuation. Keeps the
+// value usable as a geocoding query without becoming a URL-injection vector.
+const LOCATION_RE = /^[\p{L}\p{N}\s,.'-]{1,64}$/u;
+const location = z.string().trim().min(1).max(64).regex(LOCATION_RE);
+
+/**
+ * Whitelist for incoming config patches. Every field optional, because
+ * POST /api/board/config is a partial patch, not a replace.
+ */
+export const ConfigPatchSchema = z
+  .object({
+    main: z
+      .object({
+        selected: z.enum(MAIN_SOURCES),
+        rotate: z.boolean(),
+        rotationSources: z.array(z.enum(MAIN_SOURCES)).max(MAIN_SOURCES.length),
+        refreshMinutes: z.number().int().min(1).max(720),
+        weather: z.object({ location }).partial(),
+        crypto: z.object({ coin: z.enum(COINS) }).partial(),
+        prayer: z.object({ location }).partial(),
+        flights: z.object({ location }).partial(),
+      })
+      .partial(),
+    sound: z
+      .object({
+        enabled: z.boolean(),
+        volume: z.number().min(0).max(1),
+      })
+      .partial(),
+  })
+  .partial()
+  .strict();
+
+export type ConfigPatch = z.infer<typeof ConfigPatchSchema>;
+
+// Keys that would let a JSON payload reach Object.prototype.
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function deepMerge<T>(base: T, patch: Partial<T>): T {
+export function deepMerge<T>(base: T, patch: any): T {
   const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
   for (const [k, v] of Object.entries(patch ?? {})) {
     if (FORBIDDEN_KEYS.has(k)) continue;
-    if (v && typeof v === 'object' && !Array.isArray(v) && typeof (out as any)[k] === 'object') {
-      out[k] = deepMerge((out as any)[k], v as any);
+    if (v && typeof v === 'object' && !Array.isArray(v) && typeof out[k] === 'object') {
+      out[k] = deepMerge(out[k], v);
     } else if (v !== undefined) {
       out[k] = v;
     }
@@ -76,51 +108,7 @@ function deepMerge<T>(base: T, patch: Partial<T>): T {
   return out;
 }
 
-let config: Config = load();
-
-function load(): Config {
-  try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    return deepMerge(DEFAULT_CONFIG, raw);
-  } catch {
-    return structuredClone(DEFAULT_CONFIG);
-  }
-}
-
-export function getConfig(): Config {
-  return config;
-}
-
-export function saveConfig(patch: Partial<Config>): Config {
-  config = deepMerge(config, patch);
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-  return config;
-}
-
-const SECRET = '••••••••';
-
-/** Config safe to send to the browser: secrets replaced with a sentinel. */
-export function publicConfig(): any {
-  const c = structuredClone(config) as any;
-  for (const key of ['telegram', 'discord', 'slack']) {
-    const m = c.messages[key];
-    for (const field of ['botToken', 'appToken']) {
-      if (typeof m[field] === 'string') m[field] = m[field] ? SECRET : '';
-    }
-  }
-  return c;
-}
-
-/** Strip sentinel values from an incoming patch so saved secrets survive. */
-export function sanitizePatch(patch: any): Partial<Config> {
-  const p = structuredClone(patch ?? {});
-  for (const key of ['telegram', 'discord', 'slack']) {
-    const m = p?.messages?.[key];
-    if (!m) continue;
-    for (const field of ['botToken', 'appToken']) {
-      if (m[field] === SECRET) delete m[field];
-    }
-  }
-  return p;
+/** Fill in anything a stored config predates. */
+export function withDefaults(stored: unknown): Config {
+  return deepMerge(structuredClone(DEFAULT_CONFIG), stored ?? {});
 }

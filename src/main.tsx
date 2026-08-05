@@ -14,7 +14,9 @@ const SettingsPage = lazy(() =>
 
 const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
-  { path: '/board', element: <BoardPage /> },
+  // The board's URL carries an unguessable token in the path rather than
+  // relying on a cookie: Plash's storage persistence cannot be trusted.
+  { path: '/b/:token', element: <BoardPage /> },
   { path: '/settings', element: <SettingsPage /> },
 ]);
 
