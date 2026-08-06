@@ -26,6 +26,7 @@ import {
 } from './boardService.js';
 import { paramsFromConfig } from './integrations/main.js';
 import { getCachedSource } from './integrations/cache.js';
+import { PUBLIC_BASE_URL, checkBaseUrl } from './baseUrl.js';
 import {
   googleConfigured,
   loadSession,
@@ -36,11 +37,6 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
-// Trailing slashes stripped so `${base}/b/${token}` can never produce "//b/".
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`).replace(
-  /\/+$/,
-  '',
-);
 
 const app = express();
 // Render terminates TLS upstream, so without this req.ip is the proxy's.
@@ -198,6 +194,7 @@ if (fs.existsSync(dist)) {
 // ----------------------------------------------------------------- boot
 
 async function main() {
+  checkBaseUrl();
   await migrate();
   if (!googleConfigured()) {
     console.warn(

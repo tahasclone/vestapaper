@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Express, NextFunction, Request, Response } from 'express';
 import { one, query } from './db.js';
+import { PUBLIC_BASE_URL, isHttps } from './baseUrl.js';
 import { createBoard, getBoardByUser, type BoardRow } from './boardService.js';
 
 const COOKIE = 'solaris_session';
@@ -53,13 +54,7 @@ function safeReturnTo(value: unknown): string {
   return s.startsWith('/') && !s.startsWith('//') ? s : '/app';
 }
 
-function baseUrl(): string {
-  return (process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
-}
-
-// Always derived from configuration, never from the Host header: host-header
-// injection into an OAuth redirect is a real attack.
-const redirectUri = () => `${baseUrl()}/auth/google/callback`;
+const redirectUri = () => `${PUBLIC_BASE_URL}/auth/google/callback`;
 
 /**
  * Hand-rolled rather than pulling in a cookie library: the value is always a
@@ -76,7 +71,7 @@ function sessionCookie(id: string, maxAgeSeconds: number): string {
     'SameSite=Lax',
     `Max-Age=${maxAgeSeconds}`,
   ];
-  if (baseUrl().startsWith('https://')) parts.push('Secure');
+  if (isHttps()) parts.push('Secure');
   return parts.join('; ');
 }
 
@@ -152,7 +147,7 @@ export async function requireBoard(req: Request, res: Response, next: NextFuncti
 export function requireSameOrigin(req: Request, res: Response, next: NextFunction) {
   if (req.method === 'GET' || req.method === 'HEAD') return next();
   const origin = req.headers.origin;
-  if (origin && origin !== baseUrl()) {
+  if (origin && origin !== PUBLIC_BASE_URL) {
     return res.status(403).json({ error: 'Cross-origin request refused' });
   }
   next();
