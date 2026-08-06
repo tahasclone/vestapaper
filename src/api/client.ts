@@ -151,3 +151,14 @@ export function logout(): Promise<{ ok: boolean }> {
 export function logoutEverywhere(): Promise<{ ok: boolean }> {
   return request('/auth/logout-all', { body: {} });
 }
+
+// ----------------------------------------------------------------- support
+
+export function submitSupport(fields: {
+  kind: string;
+  subject: string;
+  body: string;
+  replyTo?: string;
+}): Promise<{ ok: boolean; detail?: string }> {
+  return request('/api/support', { body: fields });
+}

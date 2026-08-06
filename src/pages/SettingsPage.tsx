@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { logout, rotateBoardToken, saveConfig, sendMessage, testSource } from '../api/client';
+import { rotateBoardToken, saveConfig, sendMessage, testSource } from '../api/client';
+import { AppFrame } from '../components/AppFrame';
 import { useAuth } from '../auth/AuthContext';
 import { IntegrationCard } from '../components/IntegrationCard';
-import { SplitFlapBoard } from '../board/SplitFlapBoard';
-import { formatToCells } from '../../shared/format';
 
 type TestState = { status: 'idle' | 'busy' | 'ok' | 'err'; detail?: string };
 
@@ -29,20 +28,8 @@ const MAIN_OPTIONS = [
   { key: 'flights', name: 'FLIGHT OVERHEAD', desc: 'adsb.lol · nearest aircraft, route + distance' },
 ] as const;
 
-const WORDMARK_SIZE = { rows: 1, cols: 19 };
-const WORDMARK_CELLS = formatToCells('SOLARIS WALLPAPER {yellow}', WORDMARK_SIZE);
-
-/** A real one-row board instead of the old fake decorative strip. */
-function BoardWordmark() {
-  return (
-    <div className="wordmark" aria-hidden>
-      <SplitFlapBoard cells={WORDMARK_CELLS} {...WORDMARK_SIZE} maxCellH={24} bare />
-    </div>
-  );
-}
-
 export function SettingsPage() {
-  const { user, board, config, integrations, setConfig, setBoard, refresh } = useAuth();
+  const { board, config, integrations, setConfig, setBoard, refresh } = useAuth();
   // RequireAuth guarantees these are present by the time we render.
   const [cfg, setCfgLocal] = useState<any>(config);
   const [tests, setTests] = useState<Record<string, TestState>>({});
@@ -144,32 +131,10 @@ export function SettingsPage() {
     });
 
   return (
-    <div className="settings">
-      <div className="settings-inner">
-        <div className="app-topbar">
-          <Link to={`/b/${board.token}`} className="back-link" style={{ marginBottom: 0 }}>
-            ← BACK TO BOARD
-          </Link>
-          {user && (
-            <span className="whoami">
-              {user.email}
-              <button
-                className="linkish"
-                onClick={async () => {
-                  await logout().catch(() => {});
-                  window.location.href = '/';
-                }}
-              >
-                SIGN OUT
-              </button>
-            </span>
-          )}
-        </div>
-        <BoardWordmark />
-        <h1>SETTINGS</h1>
-        <p className="subtitle">
-          One main source feeds the board. Messages interrupt it for 60 seconds, then it flips back.
-        </p>
+    <AppFrame
+      title="SETTINGS"
+      subtitle="One main source feeds the board. Messages interrupt it for 60 seconds, then it flips back."
+    >
 
         {/* -------------------------------------------------- board URL */}
         <div className="section">
@@ -521,6 +486,7 @@ export function SettingsPage() {
               <div className="field">
                 <label>MESSAGE — SUPPORTS {'{RED}'} {'{ORANGE}'} {'{YELLOW}'} {'{GREEN}'} {'{BLUE}'} {'{VIOLET}'} {'{WHITE}'} COLOR CHIPS</label>
                 <textarea
+                  className="boardish"
                   value={customText}
                   onChange={(e) => setCustomText(e.target.value)}
                   placeholder="HELLO WORLD {yellow}"
@@ -540,7 +506,6 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </AppFrame>
   );
 }

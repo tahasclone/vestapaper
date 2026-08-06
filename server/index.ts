@@ -30,6 +30,7 @@ import { PUBLIC_BASE_URL, checkBaseUrl } from './baseUrl.js';
 import { byIp, byToken, byUser, rateLimit } from './rateLimit.js';
 import { mountHooks } from './hooks.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
+import { mountSupport } from './support.js';
 import { listForBoard, publicView } from './integrations/store.js';
 import {
   googleConfigured,
@@ -107,6 +108,7 @@ app.use(
 mountAuth(app);
 mountHooks(app);
 mountIntegrationRoutes(app);
+mountSupport(app);
 
 // ------------------------------------------------------- public board API
 

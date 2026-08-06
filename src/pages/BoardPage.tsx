@@ -15,6 +15,25 @@ function GearIcon() {
   );
 }
 
+function HomeIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 10.5 12 3.5l9 7" />
+      <path d="M5.5 9.5V20h13V9.5" />
+      <path d="M9.75 20v-5.5h4.5V20" />
+    </svg>
+  );
+}
+
 export function BoardPage() {
   const { token } = useParams<{ token: string }>();
   const { state } = useBoardState(token ?? null);
@@ -51,14 +70,18 @@ export function BoardPage() {
       <div className="board-stage">
         <SplitFlapBoard cells={cells} rows={rows} cols={cols} />
       </div>
-      <Link
-        to="/settings"
-        className={`gear ${gearVisible ? '' : 'hidden'}`}
-        aria-label="Settings"
+      {/* Both fade out with the board so the wallpaper stays clean. */}
+      <div
+        className={`board-nav ${gearVisible ? '' : 'hidden'}`}
         onMouseEnter={() => setGearVisible(true)}
       >
-        <GearIcon />
-      </Link>
+        <Link to="/" className="gear" aria-label="Home" title="Home">
+          <HomeIcon />
+        </Link>
+        <Link to="/app" className="gear" aria-label="Settings" title="Settings">
+          <GearIcon />
+        </Link>
+      </div>
     </div>
   );
 }

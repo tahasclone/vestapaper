@@ -14,6 +14,9 @@ const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default:
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
+const SupportPage = lazy(() =>
+  import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })),
+);
 
 const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -27,6 +30,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <SettingsPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/app/support',
+    element: (
+      <RequireAuth>
+        <SupportPage />
       </RequireAuth>
     ),
   },
