@@ -28,14 +28,14 @@ const MAIN_OPTIONS = [
   { key: 'flights', name: 'FLIGHT OVERHEAD', desc: 'adsb.lol · nearest aircraft, route + distance' },
 ] as const;
 
-const WORDMARK_SIZE = { rows: 1, cols: 12 };
-const WORDMARK_CELLS = formatToCells('SOLARIS {yellow}', WORDMARK_SIZE);
+const WORDMARK_SIZE = { rows: 1, cols: 19 };
+const WORDMARK_CELLS = formatToCells('SOLARIS WALLPAPER {yellow}', WORDMARK_SIZE);
 
 /** A real one-row board instead of the old fake decorative strip. */
-function Wordmark() {
+function BoardWordmark() {
   return (
     <div className="wordmark" aria-hidden>
-      <SplitFlapBoard cells={WORDMARK_CELLS} {...WORDMARK_SIZE} maxCellH={26} bare />
+      <SplitFlapBoard cells={WORDMARK_CELLS} {...WORDMARK_SIZE} maxCellH={24} bare />
     </div>
   );
 }
@@ -161,7 +161,7 @@ export function SettingsPage() {
             </span>
           )}
         </div>
-        <Wordmark />
+        <BoardWordmark />
         <h1>SETTINGS</h1>
         <p className="subtitle">
           One main source feeds the board. Messages interrupt it for 60 seconds, then it flips back.

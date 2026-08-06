@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Wordmark } from '../components/Wordmark';
 import { FULL_BOARD } from '../../shared/charset';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { useSequence } from '../board/useSequence';
@@ -37,15 +38,6 @@ const STEPS = [
   ['Pick your sources', 'Choose one, or rotate through several on a timer you set.'],
   ['Point Plash at it', 'Copy your board URL into Plash and it becomes your wallpaper.'],
 ];
-
-function Wordmark() {
-  return (
-    <span className="wm">
-      SOLARIS
-      <i className="wm-chip" aria-hidden />
-    </span>
-  );
-}
 
 export function LandingPage() {
   const heroCells = useSequence(HERO_FRAMES, { holdMs: 2600 });

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { Wordmark } from '../components/Wordmark';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { formatToCells } from '../../shared/format';
 import '../landing.css';
@@ -24,9 +25,8 @@ export function LoginPage() {
   return (
     <div className="lp">
       <header className="lp-nav">
-        <Link to="/" className="wm" style={{ textDecoration: 'none' }}>
-          SOLARIS
-          <i className="wm-chip" aria-hidden />
+        <Link to="/">
+          <Wordmark />
         </Link>
       </header>
 
