@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { logout, rotateBoardToken, saveConfig, sendMessage, testSource } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { IntegrationCard } from '../components/IntegrationCard';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { formatToCells } from '../../shared/format';
 
@@ -41,7 +42,7 @@ function BoardWordmark() {
 }
 
 export function SettingsPage() {
-  const { user, board, config, setConfig, setBoard } = useAuth();
+  const { user, board, config, integrations, setConfig, setBoard, refresh } = useAuth();
   // RequireAuth guarantees these are present by the time we render.
   const [cfg, setCfgLocal] = useState<any>(config);
   const [tests, setTests] = useState<Record<string, TestState>>({});
@@ -63,6 +64,9 @@ export function SettingsPage() {
       </div>
     );
   }
+
+  const byKind = (k: 'telegram' | 'slack' | 'discord') =>
+    integrations?.find((i) => i.kind === k);
 
   const setCfg = (next: any) => {
     setCfgLocal(next);
@@ -401,6 +405,108 @@ export function SettingsPage() {
           <div className="section-label">
             MESSAGES <span className="hint">newest message wins, shows for 60 seconds</span>
           </div>
+
+          <IntegrationCard
+            kind="telegram"
+            title="TELEGRAM"
+            blurb="Message your bot and it lands on the board"
+            integration={byKind('telegram')}
+            onChanged={refresh}
+            fields={[
+              { name: 'botToken', label: 'BOT TOKEN', secret: true, placeholder: '123456:ABC-DEF…' },
+            ]}
+            steps={[
+              <>
+                In Telegram, message <b>@BotFather</b> and send <code>/newbot</code>. Pick any name
+                and username.
+              </>,
+              <>BotFather replies with a token. Paste it below and press Connect.</>,
+              <>
+                That is it. We register the webhook with Telegram for you, so there is nothing to
+                copy anywhere.
+              </>,
+              <>Send your bot any message and watch the board take it.</>,
+            ]}
+            note={
+              <>
+                Telegram allows one listener per bot, so connecting here stops any other tool that
+                polls the same bot.
+              </>
+            }
+          />
+
+          <IntegrationCard
+            kind="slack"
+            title="SLACK"
+            blurb="Post in a channel your bot can see"
+            integration={byKind('slack')}
+            onChanged={refresh}
+            fields={[
+              { name: 'signingSecret', label: 'SIGNING SECRET', secret: true },
+              { name: 'channelId', label: 'CHANNEL ID (OPTIONAL, LIMITS IT TO ONE CHANNEL)' },
+            ]}
+            steps={[
+              <>
+                Go to <b>api.slack.com/apps</b> and create an app from scratch in your workspace.
+              </>,
+              <>
+                Under <b>Basic Information</b>, copy the <b>Signing Secret</b> and paste it below,
+                then press Connect so we can generate your request URL.
+              </>,
+              <>
+                Under <b>Event Subscriptions</b>, turn it on and paste the request URL shown above.
+                Slack verifies it immediately.
+              </>,
+              <>
+                Still there, subscribe to the bot event <code>message.channels</code>, then under{' '}
+                <b>OAuth &amp; Permissions</b> add the <code>channels:history</code> scope and
+                install the app.
+              </>,
+              <>
+                Invite the bot to a channel with <code>/invite @yourbot</code>, then post something.
+              </>,
+            ]}
+            note={<>The bot only sees channels it has been invited to.</>}
+          />
+
+          <IntegrationCard
+            kind="discord"
+            title="DISCORD"
+            blurb="Run /board anywhere your bot lives"
+            integration={byKind('discord')}
+            onChanged={refresh}
+            fields={[
+              { name: 'publicKey', label: 'PUBLIC KEY (64 HEX CHARACTERS)' },
+              { name: 'botToken', label: 'BOT TOKEN', secret: true },
+            ]}
+            steps={[
+              <>
+                Go to <b>discord.com/developers/applications</b> and create an application.
+              </>,
+              <>
+                From <b>General Information</b> copy the <b>Public Key</b>; from <b>Bot</b> copy the{' '}
+                <b>Token</b>. Paste both below and press Connect. We register the{' '}
+                <code>/board</code> command for you.
+              </>,
+              <>
+                Back in <b>General Information</b>, paste the interactions endpoint URL shown above.
+                Discord checks it as you save.
+              </>,
+              <>
+                Invite the bot to your server from <b>OAuth2 → URL Generator</b>, ticking{' '}
+                <code>bot</code> and <code>applications.commands</code>.
+              </>,
+              <>
+                Type <code>/board hello</code> in any channel.
+              </>,
+            ]}
+            note={
+              <>
+                Discord is a slash command rather than reading your messages. Watching a channel
+                needs a permanently connected bot, which this does not run.
+              </>
+            }
+          />
 
           {/* Custom message */}
           <div className="card active">

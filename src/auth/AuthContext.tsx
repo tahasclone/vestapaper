@@ -8,6 +8,7 @@ interface AuthValue {
   user: Me['user'];
   board: Me['board'] | null;
   config: any;
+  integrations: Me['integrations'] | null;
   setConfig: (c: any) => void;
   setBoard: (b: Me['board']) => void;
   refresh: () => Promise<void>;
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: me?.user ?? null,
         board: me?.board ?? null,
         config: me?.config ?? null,
+        integrations: me?.integrations ?? null,
         setConfig: (c) => setMe((prev) => (prev ? { ...prev, config: c } : prev)),
         setBoard: (b) => setMe((prev) => (prev ? { ...prev, board: b } : prev)),
         refresh,

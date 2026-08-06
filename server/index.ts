@@ -28,6 +28,9 @@ import { paramsFromConfig } from './integrations/main.js';
 import { getCachedSource } from './integrations/cache.js';
 import { PUBLIC_BASE_URL, checkBaseUrl } from './baseUrl.js';
 import { byIp, byToken, byUser, rateLimit } from './rateLimit.js';
+import { mountHooks } from './hooks.js';
+import { mountIntegrationRoutes } from './integrations/routes.js';
+import { listForBoard, publicView } from './integrations/store.js';
 import {
   googleConfigured,
   loadSession,
@@ -102,6 +105,8 @@ app.use(
   rateLimit({ name: 'signin', limit: 20, windowMs: 60 * 60_000, key: byIp }),
 );
 mountAuth(app);
+mountHooks(app);
+mountIntegrationRoutes(app);
 
 // ------------------------------------------------------- public board API
 
@@ -129,6 +134,7 @@ app.get(
 app.get('/api/me', requireBoard, async (req, res) => {
   const board = req.board!;
   void touchLastSeen(board.id);
+  const integrations = (await listForBoard(board.id)).map(publicView);
   res.json({
     user: {
       email: req.user!.email,
@@ -142,6 +148,7 @@ app.get('/api/me', requireBoard, async (req, res) => {
       boardUrl: `${PUBLIC_BASE_URL}/b/${board.public_token}`,
     },
     config: withDefaults(board.config),
+    integrations,
   });
 });
 

@@ -82,10 +82,39 @@ export function getBoardState(
 
 // -------------------------------------------------------------- account
 
+export interface Integration {
+  kind: 'telegram' | 'slack' | 'discord';
+  enabled: boolean;
+  configured: boolean;
+  status: 'unconfigured' | 'ok' | 'pending' | 'error' | string;
+  statusDetail: string | null;
+  channelFilter: string | null;
+  lastEventAt: string | null;
+  webhookUrl: string | null;
+}
+
 export interface Me {
   user: { email: string; name?: string; pictureUrl?: string } | null;
   board: { token: string; rows: number; cols: number; boardUrl: string };
   config: any;
+  integrations: Integration[];
+}
+
+export function saveIntegration(
+  kind: string,
+  fields: Record<string, string>,
+): Promise<{ ok: boolean; detail?: string; webhookUrl?: string }> {
+  return request(`/api/board/integrations/${encodeURIComponent(kind)}`, {
+    method: 'PUT',
+    body: fields,
+  });
+}
+
+export function deleteIntegration(kind: string): Promise<{ ok: boolean }> {
+  return request(`/api/board/integrations/${encodeURIComponent(kind)}`, {
+    method: 'DELETE',
+    body: {},
+  });
 }
 
 export function getMe(): Promise<Me> {
