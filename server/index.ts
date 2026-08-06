@@ -27,6 +27,7 @@ import {
 import { paramsFromConfig } from './integrations/main.js';
 import { getCachedSource } from './integrations/cache.js';
 import { PUBLIC_BASE_URL, checkBaseUrl } from './baseUrl.js';
+import { byIp, byToken, byUser, rateLimit } from './rateLimit.js';
 import {
   googleConfigured,
   loadSession,
@@ -47,9 +48,26 @@ app.set('trust proxy', 1);
 app.use('/api', express.json({ limit: '32kb' }));
 app.use('/hooks', express.raw({ type: '*/*', limit: '64kb' }));
 
+// 'unsafe-inline' for style is required: cell sizing sets CSS custom
+// properties via inline style attributes. Fonts come from Google Fonts.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  'font-src https://fonts.gstatic.com',
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  // no-referrer keeps a board token out of other sites' logs if one is linked.
   res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', CSP);
   next();
 });
 
@@ -77,11 +95,20 @@ app.get('/healthz', (_req, res) => {
 // Session first, then the same-origin gate, then the authenticated routes.
 app.use(loadSession);
 app.use('/api', requireSameOrigin);
+
+// Sign-in is cheap to start but writes an oauth_states row each time.
+app.use(
+  '/auth/google',
+  rateLimit({ name: 'signin', limit: 20, windowMs: 60 * 60_000, key: byIp }),
+);
 mountAuth(app);
 
 // ------------------------------------------------------- public board API
 
-app.get('/api/b/:token/state', async (req, res) => {
+app.get(
+  '/api/b/:token/state',
+  rateLimit({ name: 'state', limit: 30, windowMs: 60_000, key: byToken }),
+  async (req, res) => {
   void maybePrune();
   const since = Number(req.query.since);
   const state = await readBoardState(req.params.token);
@@ -90,11 +117,12 @@ app.get('/api/b/:token/state', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Robots-Tag', 'noindex');
 
-  if (Number.isFinite(since) && since > 0 && state.revision === since) {
-    return res.json({ unchanged: true, revision: state.revision });
-  }
-  res.json(state);
-});
+    if (Number.isFinite(since) && since > 0 && state.revision === since) {
+      return res.json({ unchanged: true, revision: state.revision });
+    }
+    res.json(state);
+  },
+);
 
 // ------------------------------------------------------------- board admin
 
@@ -128,26 +156,40 @@ app.post('/api/board/config', requireBoard, async (req, res) => {
   res.json({ ok: true, config: merged });
 });
 
-app.post('/api/board/message', requireBoard, async (req, res) => {
+app.post(
+  '/api/board/message',
+  rateLimit({ name: 'message', limit: 20, windowMs: 60_000, key: byUser }),
+  requireBoard,
+  async (req, res) => {
   const board = req.board!;
   const text = String(req.body?.text ?? '').trim();
   if (!text) return res.status(400).json({ error: 'Empty message' });
   if (text.length > 500) return res.status(400).json({ error: 'Message too long' });
-  await setOverride(board.id, text);
-  res.json({ ok: true });
-});
+    await setOverride(board.id, text);
+    res.json({ ok: true });
+  },
+);
 
-app.post('/api/board/rotate-token', requireBoard, async (req, res) => {
+app.post(
+  '/api/board/rotate-token',
+  rateLimit({ name: 'rotate', limit: 10, windowMs: 60 * 60_000, key: byUser }),
+  requireBoard,
+  async (req, res) => {
   const board = req.board!;
-  const token = await rotateToken(board.id);
-  res.json({ ok: true, token, boardUrl: `${PUBLIC_BASE_URL}/b/${token}` });
-});
+    const token = await rotateToken(board.id);
+    res.json({ ok: true, token, boardUrl: `${PUBLIC_BASE_URL}/b/${token}` });
+  },
+);
 
 /**
  * Preview one source without changing what the board shows. Routed through the
  * shared cache so repeated clicks cost nothing upstream.
  */
-app.post('/api/board/test/:source', requireBoard, async (req, res) => {
+app.post(
+  '/api/board/test/:source',
+  rateLimit({ name: 'test', limit: 10, windowMs: 60_000, key: byUser }),
+  requireBoard,
+  async (req, res) => {
   const board = req.board!;
   const source = req.params.source as MainSource;
   if (!MAIN_SOURCES.includes(source)) {
@@ -158,13 +200,14 @@ app.post('/api/board/test/:source', requireBoard, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ ok: false, error: 'Invalid settings' });
   const cfg = deepMerge(withDefaults(board.config), parsed.data);
 
-  try {
-    const { text } = await getCachedSource(source, paramsFromConfig(cfg), boardSize(board));
-    res.json({ ok: true, detail: text.slice(0, 160) });
-  } catch (err) {
-    res.json({ ok: false, error: (err as Error).message });
-  }
-});
+    try {
+      const { text } = await getCachedSource(source, paramsFromConfig(cfg), boardSize(board));
+      res.json({ ok: true, detail: text.slice(0, 160) });
+    } catch (err) {
+      res.json({ ok: false, error: (err as Error).message });
+    }
+  },
+);
 
 // ------------------------------------------------------- static frontend
 
