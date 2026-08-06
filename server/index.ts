@@ -55,6 +55,21 @@ app.use((_req, res, next) => {
   next();
 });
 
+const POLLUTING_KEYS = /"(__proto__|constructor|prototype)"\s*:/;
+
+/**
+ * Reject prototype-polluting payloads outright. deepMerge already skips these
+ * keys, but refusing them here makes the guarantee explicit rather than a
+ * property of one function nobody will remember to preserve.
+ */
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  if (POLLUTING_KEYS.test(JSON.stringify(req.body ?? null))) {
+    return res.status(400).json({ error: 'Malformed request' });
+  }
+  next();
+});
+
 app.get('/healthz', (_req, res) => {
   // Deliberately touches no dependency: a DB-backed check would flap every
   // time Neon resumes from its idle suspend.

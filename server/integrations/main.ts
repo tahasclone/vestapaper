@@ -202,7 +202,7 @@ export async function fetchWord(
     body.push(partOfSpeech ? `(${partOfSpeech}) ${definition}` : definition);
   }
   return {
-    text: `${word}: ${definition}`,
+    text: definition ? `${word}: ${definition}` : word,
     cells: formatToCells(body.join('\n'), size),
   };
 }
