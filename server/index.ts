@@ -30,7 +30,7 @@ import { PUBLIC_BASE_URL, checkBaseUrl } from './baseUrl.js';
 import { byIp, byToken, byUser, rateLimit } from './rateLimit.js';
 import { mountHooks } from './hooks.js';
 import { mountIntegrationRoutes } from './integrations/routes.js';
-import { mountSupport } from './support.js';
+import { mailerName, mountSupport } from './support.js';
 import { listForBoard, publicView } from './integrations/store.js';
 import {
   googleConfigured,
@@ -248,6 +248,13 @@ if (fs.existsSync(dist)) {
 async function main() {
   checkBaseUrl();
   await migrate();
+  const mailer = mailerName();
+  console.log(
+    mailer
+      ? `[support] sending email via ${mailer}`
+      : '[support] no email provider set (RESEND_API_KEY or POSTMARK_TOKEN); ' +
+          'requests will be stored in the database only',
+  );
   if (!googleConfigured()) {
     console.warn(
       '[auth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set — sign-in will return 503.',

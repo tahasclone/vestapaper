@@ -27,7 +27,10 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
-      - key: POSTMARK_TOKEN
+      # Support email: set RESEND_API_KEY (preferred) or POSTMARK_TOKEN.
+      - key: RESEND_API_KEY
         sync: false
-      - key: POSTMARK_FROM
+      - key: MAIL_FROM
+        sync: false
+      - key: POSTMARK_TOKEN
         sync: false

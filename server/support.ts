@@ -23,50 +23,127 @@ const LABEL: Record<(typeof KINDS)[number], string> = {
   other: 'Other',
 };
 
-async function sendViaPostmark(fields: {
+interface Mail {
+  from: string;
+  to: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+}
+
+/**
+ * Resend or Postmark, whichever is configured. Resend wins when both are, on
+ * the grounds that a larger free allowance is the only thing separating them
+ * for a form like this.
+ *
+ * Resend's default sender (onboarding@resend.dev) may only email the address
+ * the Resend account was created with, which is exactly what a support form
+ * pointed at your own inbox needs — so no domain verification is required
+ * until you want a branded From address.
+ */
+function mailer(): { name: string; send: (m: Mail) => Promise<void> } | null {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    return {
+      name: 'resend',
+      send: async (m) => {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: m.from,
+            to: [m.to],
+            reply_to: m.replyTo,
+            subject: m.subject,
+            text: m.text,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) {
+          const detail: any = await res.json().catch(() => ({}));
+          throw new Error(detail.message ?? detail.error ?? `Resend returned ${res.status}`);
+        }
+      },
+    };
+  }
+
+  const postmarkToken = process.env.POSTMARK_TOKEN;
+  if (postmarkToken) {
+    return {
+      name: 'postmark',
+      send: async (m) => {
+        const res = await fetch('https://api.postmarkapp.com/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Postmark-Server-Token': postmarkToken,
+          },
+          body: JSON.stringify({
+            From: m.from,
+            To: m.to,
+            ReplyTo: m.replyTo,
+            Subject: m.subject,
+            TextBody: m.text,
+            MessageStream: 'outbound',
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) {
+          const detail: any = await res.json().catch(() => ({}));
+          throw new Error(detail.Message ?? `Postmark returned ${res.status}`);
+        }
+      },
+    };
+  }
+
+  return null;
+}
+
+export function mailerName(): string | null {
+  return mailer()?.name ?? null;
+}
+
+async function sendSupportEmail(fields: {
   kind: string;
   subject: string;
   body: string;
   replyTo?: string;
   email: string;
 }): Promise<void> {
-  const token = process.env.POSTMARK_TOKEN;
-  const from = process.env.POSTMARK_FROM;
+  const provider = mailer();
   const to = process.env.SUPPORT_TO;
-  if (!token || !from || !to) {
-    throw new Error('Email is not configured on this server');
-  }
+  // Resend's sandbox sender works with no domain setup at all.
+  const from =
+    process.env.MAIL_FROM ??
+    process.env.POSTMARK_FROM ??
+    (provider?.name === 'resend' ? 'Solaris Wallpaper <onboarding@resend.dev>' : undefined);
 
-  const res = await fetch('https://api.postmarkapp.com/email', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Postmark-Server-Token': token,
-    },
-    body: JSON.stringify({
-      From: from,
-      To: to,
-      // Only ever in ReplyTo, never From or Subject, and stripped of newlines.
-      ReplyTo: fields.replyTo ? oneLine(fields.replyTo) : oneLine(fields.email),
-      Subject: oneLine(`[Solaris] ${LABEL[fields.kind as never] ?? fields.kind}: ${fields.subject}`),
-      TextBody: [
-        `From: ${fields.email}`,
-        fields.replyTo ? `Reply to: ${fields.replyTo}` : null,
-        `Type: ${LABEL[fields.kind as never] ?? fields.kind}`,
-        '',
-        fields.body,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      MessageStream: 'outbound',
-    }),
-    signal: AbortSignal.timeout(15_000),
+  if (!provider) throw new Error('No email provider configured');
+  if (!to) throw new Error('SUPPORT_TO is not set');
+  if (!from) throw new Error('MAIL_FROM is not set');
+
+  const label = LABEL[fields.kind as never] ?? fields.kind;
+  await provider.send({
+    from,
+    to,
+    // User-supplied text only ever lands in ReplyTo, and only after newlines
+    // are flattened, so it cannot forge additional headers.
+    replyTo: oneLine(fields.replyTo || fields.email),
+    subject: oneLine(`[Solaris] ${label}: ${fields.subject}`),
+    text: [
+      `From: ${fields.email}`,
+      fields.replyTo ? `Reply to: ${fields.replyTo}` : null,
+      `Type: ${label}`,
+      '',
+      fields.body,
+    ]
+      .filter(Boolean)
+      .join('\n'),
   });
-  if (!res.ok) {
-    const detail: any = await res.json().catch(() => ({}));
-    throw new Error(detail.Message ?? `Postmark returned ${res.status}`);
-  }
 }
 
 export function mountSupport(app: Express) {
@@ -102,7 +179,7 @@ export function mountSupport(app: Express) {
     // Stored first, mailed second: the request is never lost just because
     // email is unconfigured or Postmark is having a bad day.
     try {
-      await sendViaPostmark({ kind, subject, body, replyTo, email: req.user.email });
+      await sendSupportEmail({ kind, subject, body, replyTo, email: req.user.email });
       await query('update support_requests set delivered_at = now() where id = $1', [row!.id]);
       res.json({ ok: true, detail: 'Thanks. Your message is on its way.' });
     } catch (err) {
