@@ -29,7 +29,11 @@ import { getCachedSource } from './integrations/cache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`;
+// Trailing slashes stripped so `${base}/b/${token}` can never produce "//b/".
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`).replace(
+  /\/+$/,
+  '',
+);
 
 /**
  * Until Google sign-in lands (phase 3), local development works against a
