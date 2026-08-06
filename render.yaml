@@ -1,8 +1,33 @@
 services:
   - type: web
-    name: splitflap
+    name: solaris-wallpaper
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run serve
-    healthCheckPath: /api/board-state
+    # Deliberately touches no dependency: a DB-backed health check would flap
+    # every time Neon resumes from its idle suspend.
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SUPPORT_TO
+        value: thirtydaysuae@gmail.com
+      # sync: false means "prompt me in the dashboard, don't store it here".
+      # Set each of these under Environment for the service.
+      - key: DATABASE_URL
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: TOKEN_ENC_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: POSTMARK_TOKEN
+        sync: false
+      - key: POSTMARK_FROM
+        sync: false
