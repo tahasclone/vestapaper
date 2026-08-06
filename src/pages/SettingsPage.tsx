@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  getMe,
-  rotateBoardToken,
-  saveConfig,
-  sendMessage,
-  testSource,
-  type Me,
-} from '../api/client';
+import { logout, rotateBoardToken, saveConfig, sendMessage, testSource } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { SplitFlapBoard } from '../board/SplitFlapBoard';
 import { formatToCells } from '../../shared/format';
 
@@ -47,9 +41,9 @@ function Wordmark() {
 }
 
 export function SettingsPage() {
-  const [cfg, setCfg] = useState<any>(null);
-  const [board, setBoard] = useState<Me['board'] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { user, board, config, setConfig, setBoard } = useAuth();
+  // RequireAuth guarantees these are present by the time we render.
+  const [cfg, setCfgLocal] = useState<any>(config);
   const [tests, setTests] = useState<Record<string, TestState>>({});
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [customText, setCustomText] = useState('');
@@ -57,23 +51,8 @@ export function SettingsPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    getMe()
-      .then((me) => {
-        setCfg(me.config);
-        setBoard(me.board);
-      })
-      .catch((e) => setLoadError(e.message));
-  }, []);
-
-  if (loadError) {
-    return (
-      <div className="settings">
-        <div className="settings-inner">
-          <p className="subtitle">COULD NOT LOAD YOUR BOARD: {loadError.toUpperCase()}</p>
-        </div>
-      </div>
-    );
-  }
+    if (config) setCfgLocal(config);
+  }, [config]);
 
   if (!cfg || !board) {
     return (
@@ -84,6 +63,11 @@ export function SettingsPage() {
       </div>
     );
   }
+
+  const setCfg = (next: any) => {
+    setCfgLocal(next);
+    setConfig(next);
+  };
 
   const patch = (fn: (draft: any) => void) => {
     const draft = structuredClone(cfg);
@@ -158,7 +142,25 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <div className="settings-inner">
-        <Link to={`/b/${board.token}`} className="back-link">← BACK TO BOARD</Link>
+        <div className="app-topbar">
+          <Link to={`/b/${board.token}`} className="back-link" style={{ marginBottom: 0 }}>
+            ← BACK TO BOARD
+          </Link>
+          {user && (
+            <span className="whoami">
+              {user.email}
+              <button
+                className="linkish"
+                onClick={async () => {
+                  await logout().catch(() => {});
+                  window.location.href = '/';
+                }}
+              >
+                SIGN OUT
+              </button>
+            </span>
+          )}
+        </div>
         <Wordmark />
         <h1>SETTINGS</h1>
         <p className="subtitle">

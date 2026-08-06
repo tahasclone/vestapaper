@@ -512,6 +512,40 @@ button.primary:hover {
   letter-spacing: 0.04em;
 }
 
+.app-topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.whoami {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #605e5a;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+button.linkish:hover {
+  color: var(--ink);
+  background: none;
+}
+
 /* real one-row board used as a wordmark in the app header */
 .wordmark {
   width: 280px;

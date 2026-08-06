@@ -110,3 +110,15 @@ export function testSource(
 export function rotateBoardToken(): Promise<{ ok: boolean; token: string; boardUrl: string }> {
   return request('/api/board/rotate-token', { body: {} });
 }
+
+// -------------------------------------------------------------------- auth
+
+/** Sign out this device only. */
+export function logout(): Promise<{ ok: boolean }> {
+  return request('/auth/logout', { body: {} });
+}
+
+/** Sign out every device, for when one is lost. */
+export function logoutEverywhere(): Promise<{ ok: boolean }> {
+  return request('/auth/logout-all', { body: {} });
+}

@@ -58,7 +58,7 @@ export function LandingPage() {
       <header className="lp-nav">
         <Wordmark />
         <nav>
-          <Link to="/settings">Sign in</Link>
+          <Link to="/login">Sign in</Link>
         </nav>
       </header>
 
@@ -72,7 +72,7 @@ export function LandingPage() {
           Weather, the flight passing overhead, prayer times, a word a day. It flips when something
           changes.
         </p>
-        <Link className="lp-cta" to="/settings">
+        <Link className="lp-cta" to="/login">
           Set up yours
         </Link>
 
